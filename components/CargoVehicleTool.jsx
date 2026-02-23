@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
+import FeedbackButton from "./FeedbackButton";
 
 const T = {
   ja: {
@@ -938,6 +939,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
       <div style={{ marginTop: 16, fontSize: 10, color: "#94a3b8", lineHeight: 1.5 }}>
         {t.foot}
       </div>
+      <FeedbackButton lang={lang} />
     </div>
   );
 }
