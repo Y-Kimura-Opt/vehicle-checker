@@ -766,7 +766,18 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
 
       {/* Input */}
       <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>{t.cargoInfo}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>{t.cargoInfo}</div>
+          <button onClick={() => { setW(0); setL(0); setCw(0); setH(0); setQ(1); setFixH(true); setHasResult(false); }} style={{
+            background: "none", border: "1px solid #d1d5db", borderRadius: 6,
+            padding: "3px 10px", fontSize: 11, color: "#94a3b8", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 4,
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.borderColor = "#fca5a5"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.borderColor = "#d1d5db"; }}
+          >🗑 {lang === "ja" ? "クリア" : "清除"}</button>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
           <Input label={t.lbW} unit={t.uKg} val={w} set={setW} />
           <Input label={t.lbL} unit={t.uCm} val={l} set={setL} />
