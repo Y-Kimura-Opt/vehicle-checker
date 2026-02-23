@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 const T = {
   ja: {
@@ -624,6 +624,7 @@ function Card({ v, cargo, plan, t }) {
 
 function Input({ label, unit, val, set, min = 0, step = 1 }) {
   const [text, setText] = useState(String(val));
+  useEffect(() => { setText(String(val)); }, [val]);
   const commit = (v) => { const n = parseFloat(v); set(isNaN(n) ? 0 : n); };
   return (
     <div>
