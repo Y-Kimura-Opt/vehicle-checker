@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import FeedbackButton from "./FeedbackButton";
 
 const T = {
@@ -9,7 +9,7 @@ const T = {
     title:"車両積載判定ツール", subtitle:"デッドスペース・シミュレーション対応",
     cargoInfo:"📋 貨物情報", lbW:"1個の重量", lbL:"長さ (L)", lbCw:"幅 (W)", lbH:"高さ (H)", lbQ:"数量",
     uPcs:"個", uKg:"kg", uCm:"cm",
-    totW:"総重量", uVol:"単体容積", totV:"総容積",
+    totW:"総重量", uVol:"単体容積", totV:"総容積", totQ:"合計数量",
     fixH:"天地固定（高さ方向を上向きに保持）",
     btnDone:"判定済み", btnRe:"再判定（入力変更済み）", btnGo:"判定開始",
     dirtyW:"⚠ 入力が変更されました。「再判定」ボタンを押して結果を更新してください。",
@@ -57,8 +57,40 @@ const T = {
     vzSL:(L,H)=>`荷台 ${L}cm × 高さ ${H}cm`,
     vzTL:(L,W)=>`荷台 ${L}cm × 幅 ${W}cm`,
     vzRL:(W,H)=>`幅 ${W}cm × 高さ ${H}cm`,
+    vzGap:(dim,v)=>`${dim}:${v}`,
+    vzMinGap:"最小余白",
     lgB:"カートン", lgD:"デッドスペース", lgC:"キャブ",
     font:"system-ui, sans-serif",
+    addLine:"+ 品目追加", delLine:"削除", clear:"クリア",
+    paste:"📋 貼り付け（画像可）", pasteTitle:"テキスト貼り付けで一括入力",
+    pasteSub:"貨物情報テキストを貼り付けてください",
+    pastePlace:"例:\n貨物量：28 pc\n総実重量：852 kg\nサイズ：\n80cm×74cm×116cm/12pc\n80cm×74cm×126cm/10pc\n130cm×72cm×128cm/4pc",
+    pasteBtn:"取り込み", pasteCancel:"キャンセル",
+    pasteErr:"サイズ情報を検出できませんでした。「80×74×116cm/12pc」のような形式で入力してください。",
+    pasteOk:(n)=>`${n}品目を取り込みました`,
+    imgBtn:"📷 画像読取",
+    tabText:"📋 テキスト", tabImg:"📷 画像",
+    imgTitle:"画像から貨物情報を読み取り",
+    imgSub:"スクリーンショットや写真をドロップ、貼り付け、または選択してください",
+    imgDrop:"画像をここにドロップ\nまたはクリックして選択",
+    imgReading:"🔍 画像を読み取り中...",
+    imgErr:"画像から貨物情報を読み取れませんでした。テキスト入力をお試しください。",
+    imgOk:"画像から読み取った内容を下に表示しました。確認して「取り込み」を押してください。",
+    lineNo:(n)=>`品目${n}`, maxLines:"※ 最大10品目",
+    zoneT:(nm)=>`📐 ${nm} — ゾーン配置図`,
+    zoneLn:(i,dims,q,usedL)=>`品目${i}: ${dims} ×${q}個 → L:${usedL}cm`,
+    zoneRem:(l)=>`余り ${l}cm`,
+    zoneNote:"※ 大品目からL方向にゾーン配置。小品目は上部空間に上積み",
+    zoneStkLn:(i,dims,q)=>`↑ 品目${i}: ${dims} ×${q}個（上積み）`,
+    tier:(n)=> n === 1 ? "1段目（床面）" : `${n}段目`,
+    zoneFill:(f)=>`容積効率 ${f}%`,
+    zoneHGap:(h,pct)=>`H余白: ${h}cm (${pct}%)`,
+    zoneUsedL:(u,total)=>`L方向使用 ${u} / ${total} cm`,
+    zoneW:(tw,ew)=>`重量 ${tw} / ${ew} kg`,
+    znOk:"✓ 積載可", znNg:"✗ 不可", znCaut:"⚠ 要注意",
+    znWOver:"⚠ 重量超過", znLOver:"⚠ L方向超過", znNoFit:"⚠ サイズ超過",
+    mzTk:(n,nm)=>`${n}台目: ${nm}`,
+    mzItems:(items)=> items.map(it => `品目${it.idx}×${it.q}`).join(", "),
     langBtn:"🇨🇳 中文",
   },
   zh: {
@@ -67,7 +99,7 @@ const T = {
     title:"车辆装载判定工具", subtitle:"空置空间模拟对应",
     cargoInfo:"📋 货物信息", lbW:"单件重量", lbL:"长 (L)", lbCw:"宽 (W)", lbH:"高 (H)", lbQ:"数量",
     uPcs:"件", uKg:"kg", uCm:"cm",
-    totW:"总重量", uVol:"单件体积", totV:"总体积",
+    totW:"总重量", uVol:"单件体积", totV:"总体积", totQ:"合计数量",
     fixH:"天地固定（高度方向保持朝上）",
     btnDone:"已判定", btnRe:"重新判定（已修改输入）", btnGo:"开始判定",
     dirtyW:"⚠ 输入已变更。请点击「重新判定」按钮以更新结果。",
@@ -115,8 +147,40 @@ const T = {
     vzSL:(L,H)=>`车厢 ${L}cm × 高 ${H}cm`,
     vzTL:(L,W)=>`车厢 ${L}cm × 宽 ${W}cm`,
     vzRL:(W,H)=>`宽 ${W}cm × 高 ${H}cm`,
+    vzGap:(dim,v)=>`${dim}:${v}`,
+    vzMinGap:"最小余量",
     lgB:"纸箱", lgD:"空置空间", lgC:"驾驶室",
-    font:"'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Hiragino Sans GB', sans-serif",
+    font:"'Noto Sans SC', system-ui, sans-serif",
+    addLine:"+ 添加品目", delLine:"删除", clear:"清除",
+    paste:"📋 粘贴（可识图）", pasteTitle:"粘贴文本批量输入",
+    pasteSub:"请粘贴货物信息文本",
+    pastePlace:"例:\n货物量：28 pc\n总重量：852 kg\n尺寸：\n80cm×74cm×116cm/12pc\n80cm×74cm×126cm/10pc\n130cm×72cm×128cm/4pc",
+    pasteBtn:"导入", pasteCancel:"取消",
+    pasteErr:"未检测到尺寸信息。请使用「80×74×116cm/12pc」格式输入。",
+    pasteOk:(n)=>`已导入${n}个品目`,
+    imgBtn:"📷 图片识别",
+    tabText:"📋 文本", tabImg:"📷 图片",
+    imgTitle:"从图片识别货物信息",
+    imgSub:"拖放、粘贴或选择截图/照片",
+    imgDrop:"将图片拖放到此处\n或点击选择",
+    imgReading:"🔍 正在识别图片...",
+    imgErr:"无法从图片中识别货物信息。请尝试文本输入。",
+    imgOk:"已从图片中识别内容，请确认后点击「导入」。",
+    lineNo:(n)=>`品目${n}`, maxLines:"※ 最多10个品目",
+    zoneT:(nm)=>`📐 ${nm} — 分区配置图`,
+    zoneLn:(i,dims,q,usedL)=>`品目${i}: ${dims} ×${q}件 → L:${usedL}cm`,
+    zoneRem:(l)=>`剩余 ${l}cm`,
+    zoneNote:"※ 大品目优先沿L方向分区配置，小品目叠放于上方空间",
+    zoneStkLn:(i,dims,q)=>`↑ 品目${i}: ${dims} ×${q}件（叠放）`,
+    tier:(n)=> n === 1 ? "第1层（地面）" : `第${n}层`,
+    zoneFill:(f)=>`容积效率 ${f}%`,
+    zoneHGap:(h,pct)=>`H余量: ${h}cm (${pct}%)`,
+    zoneUsedL:(u,total)=>`L方向使用 ${u} / ${total} cm`,
+    zoneW:(tw,ew)=>`重量 ${tw} / ${ew} kg`,
+    znOk:"✓ 可装载", znNg:"✗ 不可", znCaut:"⚠ 需注意",
+    znWOver:"⚠ 重量超限", znLOver:"⚠ L方向超限", znNoFit:"⚠ 尺寸超限",
+    mzTk:(n,nm)=>`第${n}辆: ${nm}`,
+    mzItems:(items)=> items.map(it => `品目${it.idx}×${it.q}`).join(", "),
     langBtn:"🇯🇵 日本語",
   },
 };
@@ -155,6 +219,220 @@ function simulate(v, cl, cw, ch, qty, fixH = false) {
   }
   return best;
 }
+
+// --- Zone-based mixed cargo simulation with stacking optimization ---
+function getRots(cl, cw, ch, fixH) {
+  return fixH
+    ? [[cl,cw,ch],[cw,cl,ch]]
+    : [[cl,cw,ch],[cw,cl,ch],[cl,ch,cw],[ch,cl,cw],[cw,ch,cl],[ch,cw,cl]];
+}
+
+// Single allocation pass with given item order and strategy
+function tryAlloc(v, lines, fixH, stackOpt) {
+  const zones = [];
+  // Pre-compute min box height per line (for stacking target)
+  const lineMinBh = lines.map(ln => {
+    if (ln.q <= 0 || ln.l <= 0 || ln.cw <= 0 || ln.h <= 0) return Infinity;
+    const rots = getRots(ln.l, ln.cw, ln.h, fixH);
+    let m = Infinity;
+    for (const [,,bh] of rots) { if (bh <= v.H) m = Math.min(m, bh); }
+    return m;
+  });
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (line.q <= 0 || line.l <= 0 || line.cw <= 0 || line.h <= 0) continue;
+    let qtyLeft = line.q;
+    const rots = getRots(line.l, line.cw, line.h, fixH);
+
+    // Phase 1: try to stack in existing zones' top space
+    for (const zone of zones) {
+      if (qtyLeft <= 0) break;
+      if (zone.topH <= 0) continue;
+      let bestFit = null;
+      for (const [bl, bw, bh] of rots) {
+        if (bl > zone.usedL || bw > v.W || bh > zone.topH) continue;
+        const nL = Math.floor(zone.usedL / bl);
+        const nW = Math.floor(v.W / bw);
+        const nH = Math.floor(zone.topH / bh);
+        const max = nL * nW * nH;
+        if (max > 0 && (!bestFit || max > bestFit.max)) {
+          bestFit = { bl, bw, bh, nL, nW, nH, max, usedH: nH * bh };
+        }
+      }
+      if (bestFit) {
+        const placed = Math.min(qtyLeft, bestFit.max);
+        zone.topItems.push({ line, placed, ...bestFit });
+        zone.topH -= bestFit.usedH;
+        qtyLeft -= placed;
+      }
+    }
+
+    // Phase 2: allocate new L zone for remaining
+    if (qtyLeft > 0) {
+      const remainL = v.L - zones.reduce((s, z) => s + z.usedL, 0);
+
+      // Find min bh among future items (for stack-optimized nH)
+      let futureMinBh = Infinity;
+      if (stackOpt) {
+        for (let j = li + 1; j < lines.length; j++) futureMinBh = Math.min(futureMinBh, lineMinBh[j]);
+      }
+
+      let bestZ = null;
+      for (const [bl, bw, bh] of rots) {
+        if (bw > v.W || bh > v.H) continue;
+        const nW = Math.floor(v.W / bw);
+        const maxNH = Math.floor(v.H / bh);
+
+        // Determine nH candidates: always try max, optionally try stack-optimized
+        const nhSet = new Set([maxNH]);
+        if (stackOpt && futureMinBh < Infinity) {
+          for (let nh = maxNH; nh >= 1; nh--) {
+            if (v.H - nh * bh >= futureMinBh) { nhSet.add(nh); break; }
+          }
+        }
+
+        for (const nH of nhSet) {
+          if (nH <= 0) continue;
+          const perSlice = nW * nH;
+          if (perSlice <= 0) continue;
+          const nL = Math.ceil(qtyLeft / perSlice);
+          const usedL = nL * bl;
+          if (usedL > remainL) continue;
+          const topH = v.H - nH * bh;
+          const hasRoom = stackOpt && topH >= futureMinBh;
+          const bestHasRoom = bestZ && stackOpt && bestZ.topH >= futureMinBh;
+          // In stackOpt mode: prefer having stacking room; among equals minimize usedL
+          if (!bestZ ||
+              (hasRoom && !bestHasRoom) ||
+              (hasRoom === bestHasRoom && usedL < bestZ.usedL) ||
+              (hasRoom === bestHasRoom && usedL === bestZ.usedL && topH > bestZ.topH)) {
+            bestZ = { bl, bw, bh, nW, nH, nL, perSlice, usedL, qty: qtyLeft,
+                      topH, max: nL * perSlice };
+          }
+        }
+      }
+      if (!bestZ) return null;
+      zones.push({ ...bestZ, line, topItems: [] });
+    }
+  }
+
+  const totalUsedL = zones.reduce((s, z) => s + z.usedL, 0);
+  if (totalUsedL > v.L) return null;
+  let totalVol = 0;
+  for (const line of lines) {
+    if (line.q > 0) totalVol += line.l * line.cw * line.h * line.q;
+  }
+  return { zones, remainL: v.L - totalUsedL, usedL: totalUsedL, totalVol,
+           fill: (totalVol / (v.L * v.W * v.H)) * 100 };
+}
+
+// Try 2 strategies: large-first × (standard / stack-optimized), pick best usedL
+// Large items always go on the floor first for stability
+function simulateZone(v, sortedLines, fixH) {
+  const results = [
+    tryAlloc(v, sortedLines, fixH, false),
+    tryAlloc(v, sortedLines, fixH, true),
+  ].filter(Boolean);
+  if (results.length === 0) return null;
+  results.sort((a, b) => a.usedL - b.usedL);
+  return results[0];
+}
+
+// Greedy fill: pack as many items as possible into one vehicle
+// Returns { zoneResult, placed: [{...line, q}], remaining: [{...line, q}] } or null
+function greedyFillZone(v, sortedLines, fixH) {
+  const lines = sortedLines.filter(ln => ln.q > 0);
+  if (lines.length === 0) return null;
+
+  const totalW = lines.reduce((s, ln) => s + ln.w * ln.q, 0);
+  // Try full fit first
+  if (totalW <= v.ew) {
+    const full = simulateZone(v, lines, fixH);
+    if (full) return { zoneResult: full, placed: lines.map(ln => ({...ln})), remaining: [] };
+  }
+
+  // Sequential greedy: add items one type at a time (large first), binary search max qty
+  function greedyPass(lines, initCurrent, initWeight) {
+    let current = [...initCurrent];
+    let curWeight = initWeight;
+    for (const ln of lines) {
+      const maxByW = ln.w > 0 ? Math.floor((v.ew - curWeight) / ln.w) : ln.q;
+      const upper = Math.min(ln.q, maxByW);
+      if (upper <= 0) continue;
+      let lo = 0, hi = upper;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const test = [...current, {...ln, q: mid}];
+        const r = simulateZone(v, test, fixH);
+        if (r) lo = mid; else hi = mid - 1;
+      }
+      if (lo > 0) { current.push({...ln, q: lo}); curWeight += ln.w * lo; }
+    }
+    return current;
+  }
+
+  const initial = greedyPass(lines, [], 0);
+  if (initial.length === 0) return null;
+
+  // Column-trim optimization: for each placed item, try reducing to previous
+  // full-column boundary and use freed L space for more items
+  let bestCurrent = initial;
+  let bestTotal = initial.reduce((s, p) => s + p.q, 0);
+
+  const initZR = simulateZone(v, initial, fixH);
+  if (initZR) {
+    for (const zone of initZR.zones) {
+      const perSlice = zone.nW * zone.nH;
+      if (perSlice <= 0) continue;
+      const fullCols = Math.floor(zone.qty / perSlice);
+      const trimmedQty = fullCols * perSlice;
+      if (trimmedQty >= zone.qty || trimmedQty <= 0) continue; // no partial column
+
+      // Build trimmed allocation
+      const trimmed = initial.map(p =>
+        p.id === zone.line.id ? {...p, q: trimmedQty} : {...p}
+      ).filter(p => p.q > 0);
+      const trimWeight = trimmed.reduce((s, p) => s + p.w * p.q, 0);
+
+      // Find remaining items to fill freed space (exclude the trimmed item)
+      const placedIds = {};
+      for (const p of trimmed) placedIds[p.id] = p.q;
+      const remLines = lines
+        .filter(ln => ln.id !== zone.line.id)  // skip trimmed item
+        .map(ln => {
+          const already = placedIds[ln.id] || 0;
+          return {...ln, q: ln.q - already};
+        }).filter(ln => ln.q > 0);
+
+      const refilled = greedyPass(remLines, trimmed, trimWeight);
+      // Consolidate duplicate ids
+      const merged = [];
+      for (const p of refilled) {
+        const ex = merged.find(m => m.id === p.id);
+        if (ex) ex.q += p.q; else merged.push({...p});
+      }
+      const refillTotal = merged.reduce((s, p) => s + p.q, 0);
+      if (refillTotal > bestTotal && simulateZone(v, merged, fixH)) {
+        bestCurrent = merged;
+        bestTotal = refillTotal;
+      }
+    }
+  }
+
+  const zoneResult = simulateZone(v, bestCurrent, fixH);
+  if (!zoneResult) return null;
+  // Sum placed qty per id (handle potential duplicates)
+  const placedQty = {};
+  for (const p of bestCurrent) placedQty[p.id] = (placedQty[p.id] || 0) + p.q;
+  const remaining = [];
+  for (const ln of lines) {
+    const rem = ln.q - (placedQty[ln.id] || 0);
+    if (rem > 0) remaining.push({...ln, q: rem});
+  }
+  return { zoneResult, placed: bestCurrent, remaining };
+}
+
 
 // --- Stacking Visualization with Truck Shape ---
 function StackingViz({ vehicle, stacking, qty, t }) {
@@ -650,155 +928,1128 @@ function Input({ label, unit, val, set, min = 0, step = 1 }) {
   );
 }
 
+// --- Zone Visualization for mixed cargo ---
+function ZoneViz({ vehicle, zoneResult, sortedLines, origLines, t }) {
+  if (!vehicle || !zoneResult) return null;
+  const { zones, remainL } = zoneResult;
+
+  const zColors = ["#3b82f6","#8b5cf6","#f59e0b","#10b981","#ec4899","#f97316","#06b6d4","#ef4444","#6366f1","#84cc16"];
+  // Color by original input order
+  const colorMap = {};
+  origLines.forEach((ln, i) => { colorMap[ln.id] = zColors[i % zColors.length]; });
+  const origIdx = (line) => origLines.findIndex(ln => ln.id === line.id) + 1;
+
+  const cabColor = "#475569", cabLight = "#64748b", frameColor = "#94a3b8", wheelColor = "#334155";
+  const bedBg = "#f1f5f9", deadBg = "#fef2f2";
+
+  // --- Scaling (same as StackingViz) ---
+  const bedMaxPx = 280;
+  const sideScale = Math.min(bedMaxPx / vehicle.L, 140 / vehicle.H);
+  const bedW = vehicle.L * sideScale;
+  const bedH = vehicle.H * sideScale;
+  const cabW = Math.max(bedW * 0.18, 36);
+  const cabH = bedH * 0.7;
+  const wheelR = Math.max(bedH * 0.12, 10);
+
+  const topScale = Math.min(bedMaxPx / vehicle.L, 100 / vehicle.W);
+  const topBedW = vehicle.L * topScale;
+  const topBedH = vehicle.W * topScale;
+  const topCabW = Math.max(topBedW * 0.18, 30);
+  const topCabH = topBedH * 0.75;
+
+  const frontScale = Math.min(160 / vehicle.W, 140 / vehicle.H);
+  const fBedW = vehicle.W * frontScale;
+  const fBedH = vehicle.H * frontScale;
+  const fWheelR = Math.max(fBedH * 0.12, 10);
+
+  // --- Build zone blocks for side view (L×H) ---
+  // Helper: CSS grid lines for individual boxes within a zone
+  function boxGrid(colPx, rowPx, color) {
+    const lc = color + "70";
+    const parts = [];
+    if (colPx > 6) parts.push(
+      `repeating-linear-gradient(90deg, transparent, transparent ${colPx - 1}px, ${lc} ${colPx - 1}px, ${lc} ${colPx + 0.5}px)`
+    );
+    if (rowPx > 6) parts.push(
+      `repeating-linear-gradient(0deg, transparent, transparent ${rowPx - 1}px, ${lc} ${rowPx - 1}px, ${lc} ${rowPx + 0.5}px)`
+    );
+    return parts.length ? { backgroundImage: parts.join(", ") } : {};
+  }
+
+  function buildSideBlocks() {
+    const blocks = [];
+    let xOff = 0;
+    for (let zi = 0; zi < zones.length; zi++) {
+      const z = zones[zi];
+      const c = colorMap[z.line.id] || zColors[0];
+      const primaryH = z.nH * z.bh;
+      // Primary zone
+      blocks.push(<div key={`p${zi}`} style={{
+        position:"absolute", left: xOff * sideScale, bottom: 0,
+        width: z.usedL * sideScale, height: primaryH * sideScale,
+        backgroundColor: c + "22", border:`1.5px solid ${c}60`, borderRadius:1,
+        ...boxGrid(z.bl * sideScale, z.bh * sideScale, c),
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize: Math.min(z.usedL * sideScale, primaryH * sideScale) > 30 ? 9 : 7,
+        overflow:"hidden",
+      }}>
+        <span style={{ fontWeight:700, color:c }}>{t.lineNo(origIdx(z.line))}</span>
+      </div>);
+
+      // Stacked items on top
+      let stackBottom = primaryH;
+      for (const ti of z.topItems) {
+        const tc = colorMap[ti.line.id] || zColors[0];
+        const sh = ti.usedH;
+        blocks.push(<div key={`s${zi}_${ti.line.id}`} style={{
+          position:"absolute", left: xOff * sideScale, bottom: stackBottom * sideScale,
+          width: z.usedL * sideScale, height: sh * sideScale,
+          backgroundColor: tc + "18", border:`1.5px dashed ${tc}60`, borderRadius:1,
+          ...boxGrid(ti.bl * sideScale, ti.bh * sideScale, tc),
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize: Math.min(z.usedL * sideScale, sh * sideScale) > 24 ? 8 : 6,
+          overflow:"hidden",
+        }}>
+          <span style={{ fontWeight:600, color:tc, opacity:0.8 }}>↑{t.lineNo(origIdx(ti.line))}</span>
+        </div>);
+        stackBottom += sh;
+      }
+      // H dead space at top of this zone (skip if very small)
+      const gapH = vehicle.H - stackBottom;
+      if (gapH > vehicle.H * 0.05) {
+        blocks.push(<div key={`gh${zi}`} style={{
+          position:"absolute", left: xOff * sideScale, top: 0,
+          width: z.usedL * sideScale, height: gapH * sideScale,
+          background: deadBg, borderBottom:"1px dashed #fca5a5",
+        }}/>);
+      }
+      xOff += z.usedL;
+    }
+    // Remaining L dead space
+    if (remainL > 0) {
+      blocks.push(<div key="deadL" style={{
+        position:"absolute", right:0, top:0,
+        width: remainL * sideScale, height:"100%",
+        background: deadBg, borderLeft:"1px dashed #fca5a5",
+      }}/>);
+    }
+    return blocks;
+  }
+
+  // --- Build zone blocks for top view (L×W) ---
+  function buildTopBlocks() {
+    const blocks = [];
+    let xOff = 0;
+    for (let zi = 0; zi < zones.length; zi++) {
+      const z = zones[zi];
+      const c = colorMap[z.line.id] || zColors[0];
+      const usedW = z.nW * z.bw;
+
+      if (z.topItems.length > 0) {
+        // Has stacking: show topmost item as primary, floor item as secondary
+        const top = z.topItems[z.topItems.length - 1]; // highest stacked
+        const tc = colorMap[top.line.id] || zColors[0];
+        const topUsedL = top.nL * top.bl;
+        const topUsedW = top.nW * top.bw;
+
+        // Top item covers its L×W range
+        blocks.push(<div key={`tpt${zi}`} style={{
+          position:"absolute", left: xOff * topScale, top: 0,
+          width: topUsedL * topScale, height: topUsedW * topScale,
+          backgroundColor: tc + "22", border:`1.5px solid ${tc}60`, borderRadius:1,
+          ...boxGrid(top.bl * topScale, top.bw * topScale, tc),
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize: Math.min(topUsedL * topScale, topUsedW * topScale) > 24 ? 8 : 6,
+          overflow:"hidden",
+        }}>
+          <span style={{ fontWeight:700, color:tc }}>↑{t.lineNo(origIdx(top.line))}</span>
+        </div>);
+
+        // Floor item visible in remaining L (if top doesn't cover full zone L)
+        if (topUsedL < z.usedL) {
+          blocks.push(<div key={`tpf${zi}`} style={{
+            position:"absolute", left: (xOff + topUsedL) * topScale, top: 0,
+            width: (z.usedL - topUsedL) * topScale, height: usedW * topScale,
+            backgroundColor: c + "22", border:`1.5px solid ${c}60`, borderRadius:1,
+            ...boxGrid(z.bl * topScale, z.bw * topScale, c),
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize: 7, overflow:"hidden",
+          }}>
+            <span style={{ fontWeight:700, color:c }}>{t.lineNo(origIdx(z.line))}</span>
+          </div>);
+        }
+
+        // W dead space (based on wider of top/floor)
+        const maxW = Math.max(usedW, topUsedW);
+        const gW = vehicle.W - maxW;
+        if (gW > 2) {
+          blocks.push(<div key={`twg${zi}`} style={{
+            position:"absolute", left: xOff * topScale, bottom: 0,
+            width: z.usedL * topScale, height: gW * topScale,
+            background: deadBg, borderTop:"1px dashed #fca5a5",
+          }}/>);
+        }
+      } else {
+        // No stacking: show floor item only
+        blocks.push(<div key={`tp${zi}`} style={{
+          position:"absolute", left: xOff * topScale, top: 0,
+          width: z.usedL * topScale, height: usedW * topScale,
+          backgroundColor: c + "22", border:`1.5px solid ${c}60`, borderRadius:1,
+          ...boxGrid(z.bl * topScale, z.bw * topScale, c),
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize: Math.min(z.usedL * topScale, usedW * topScale) > 30 ? 9 : 7,
+          overflow:"hidden",
+        }}>
+          <span style={{ fontWeight:700, color:c }}>{t.lineNo(origIdx(z.line))}</span>
+        </div>);
+        // W dead space
+        const gW = vehicle.W - usedW;
+        if (gW > 2) {
+          blocks.push(<div key={`twg${zi}`} style={{
+            position:"absolute", left: xOff * topScale, bottom: 0,
+            width: z.usedL * topScale, height: gW * topScale,
+            background: deadBg, borderTop:"1px dashed #fca5a5",
+          }}/>);
+        }
+      }
+      xOff += z.usedL;
+    }
+    if (remainL > 0) {
+      blocks.push(<div key="deadL" style={{
+        position:"absolute", right:0, top:0,
+        width: remainL * topScale, height:"100%",
+        background: deadBg, borderLeft:"1px dashed #fca5a5",
+      }}/>);
+    }
+    return blocks;
+  }
+
+  // --- Build zone blocks for rear view (W×H) - show first zone ---
+  function buildRearBlocks() {
+    const blocks = [];
+    if (zones.length === 0) return blocks;
+    const z = zones[zones.length - 1]; // rearmost zone
+    const c = colorMap[z.line.id] || zColors[0];
+    const primaryH = z.nH * z.bh;
+    const usedW = z.nW * z.bw;
+    const gW = vehicle.W - usedW;
+    const offsetX = gW * frontScale;
+    // Primary
+    blocks.push(<div key="rp" style={{
+      position:"absolute", left: offsetX, bottom:0,
+      width: usedW * frontScale, height: primaryH * frontScale,
+      backgroundColor: c + "22", border:`1.5px solid ${c}60`, borderRadius:1,
+      ...boxGrid(z.bw * frontScale, z.bh * frontScale, c),
+      display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, overflow:"hidden",
+    }}>
+      <span style={{ fontWeight:700, color:c }}>{t.lineNo(origIdx(z.line))}</span>
+    </div>);
+    // Stacked
+    let stackBottom = primaryH;
+    for (const ti of z.topItems) {
+      const tc = colorMap[ti.line.id] || zColors[0];
+      const tiW = ti.nW * ti.bw;
+      blocks.push(<div key={`rs_${ti.line.id}`} style={{
+        position:"absolute", left: offsetX, bottom: stackBottom * frontScale,
+        width: tiW * frontScale, height: ti.usedH * frontScale,
+        backgroundColor: tc + "18", border:`1.5px dashed ${tc}60`, borderRadius:1,
+        ...boxGrid(ti.bw * frontScale, ti.bh * frontScale, tc),
+        display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, overflow:"hidden",
+      }}>
+        <span style={{ fontWeight:600, color:tc, opacity:0.8 }}>↑{t.lineNo(origIdx(ti.line))}</span>
+      </div>);
+      stackBottom += ti.usedH;
+    }
+    // H dead space at top (skip if very small)
+    const gapH = vehicle.H - stackBottom;
+    if (gapH > vehicle.H * 0.05) {
+      blocks.push(<div key="deadH" style={{
+        position:"absolute", left: offsetX, top:0,
+        width: Math.max(usedW, ...z.topItems.map(ti => ti.nW * ti.bw)) * frontScale,
+        height: gapH * frontScale,
+        background: deadBg, borderBottom:"1px dashed #fca5a5",
+      }}/>);
+    }
+    // W dead space (skip if very small)
+    if (gW > vehicle.W * 0.05) {
+      blocks.push(<div key="deadW" style={{
+        position:"absolute", left:0, top:0,
+        width: gW * frontScale, height:"100%",
+        background: deadBg, borderRight:"1px dashed #fca5a5",
+      }}/>);
+    }
+    return blocks;
+  }
+
+  // --- Compute min gaps for axis labels ---
+  const gapL = remainL;
+  const minGapH = zones.length > 0 ? zones.reduce((min, z) => {
+    const usedH = z.nH * z.bh + z.topItems.reduce((s, ti) => s + ti.usedH, 0);
+    return Math.min(min, vehicle.H - usedH);
+  }, vehicle.H) : vehicle.H;
+  const minGapW = zones.length > 0 ? zones.reduce((min, z) => {
+    return Math.min(min, vehicle.W - z.nW * z.bw);
+  }, vehicle.W) : vehicle.W;
+
+  const gapStyle = { color:"#e09070", fontWeight:600 };
+
+  const Wheel = ({size, style}) => (
+    <div style={{ width:size*2, height:size*2, borderRadius:"50%", background:wheelColor,
+      border:"3px solid #1e293b", boxShadow:"inset 0 0 0 3px #64748b", ...style }} />
+  );
+
+  return (
+    <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:10, padding:16, marginBottom:16 }}>
+      <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", marginBottom:4 }}>
+        {t.zoneT(vn(vehicle,t))}
+      </div>
+      <div style={{ fontSize:10, color:"#94a3b8", marginBottom:14 }}>{t.zoneNote}</div>
+
+      <div style={{ display:"flex", gap:24, flexWrap:"wrap", justifyContent:"center", alignItems:"flex-end" }}>
+
+        {/* ===== SIDE VIEW ===== */}
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:"#64748b", marginBottom:6, textAlign:"center" }}>{t.vzSd}</div>
+          <div style={{ position:"relative", width: cabW + bedW + 8, height: bedH + wheelR + 16 }}>
+            <div style={{
+              position:"absolute", left:0, bottom: wheelR + 4,
+              width: cabW, height: cabH,
+              background: cabColor, borderRadius:"8px 4px 0 0",
+              display:"flex", flexDirection:"column", justifyContent:"flex-start", alignItems:"center", paddingTop:4,
+            }}>
+              <div style={{ width: cabW*0.7, height: cabH*0.35, background:"#bfdbfe", borderRadius:"4px 2px 0 0", border:"1px solid #93c5fd" }} />
+              <div style={{ width:"70%", height:1, background:"#64748b", marginTop: cabH*0.15 }} />
+            </div>
+            <div style={{
+              position:"absolute", left: cabW + 4, bottom: wheelR + 4,
+              width: bedW, height: bedH,
+              background: bedBg, border:`2px solid ${frameColor}`, borderRadius:"2px 2px 0 0",
+              overflow:"hidden",
+            }}>
+              {buildSideBlocks()}
+            </div>
+            <div style={{ position:"absolute", left:0, bottom: wheelR + 2, width: cabW + bedW + 4, height:3, background: cabLight, borderRadius:2 }}/>
+            <Wheel size={wheelR} style={{ position:"absolute", left: cabW*0.3, bottom:0 }} />
+            <Wheel size={wheelR} style={{ position:"absolute", left: cabW + bedW*0.2, bottom:0 }} />
+            <Wheel size={wheelR} style={{ position:"absolute", left: cabW + bedW*0.75, bottom:0 }} />
+            <div style={{ position:"absolute", bottom:0, left:0, width:"100%", height:1, background:"#e2e8f0" }}/>
+          </div>
+          <div style={{ fontSize:9, color:"#94a3b8", textAlign:"center", marginTop:4 }}>{t.vzSL(vehicle.L,vehicle.H)} <span style={gapStyle}>｜ {t.vzMinGap} {t.vzGap("L",gapL)} / {t.vzGap("H",minGapH)} cm</span></div>
+        </div>
+
+        {/* ===== TOP VIEW ===== */}
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:"#64748b", marginBottom:6, textAlign:"center" }}>{t.vzTp}</div>
+          <div style={{ position:"relative", width: topCabW + topBedW + 8, height: Math.max(topBedH, topCabH) + 4 }}>
+            <div style={{
+              position:"absolute", left:0, top: (Math.max(topBedH, topCabH) - topCabH) / 2,
+              width: topCabW, height: topCabH,
+              background: cabColor, borderRadius:"6px 3px 3px 6px",
+            }}>
+              <div style={{ position:"absolute", left:2, top:"15%", width: topCabW*0.3, height:"70%", background:"#bfdbfe", borderRadius:"3px 0 0 3px", border:"1px solid #93c5fd" }}/>
+            </div>
+            <div style={{
+              position:"absolute", left: topCabW + 4, top: (Math.max(topBedH, topCabH) - topBedH) / 2,
+              width: topBedW, height: topBedH,
+              background: bedBg, border:`2px solid ${frameColor}`, borderRadius:2,
+              overflow:"hidden",
+            }}>
+              {buildTopBlocks()}
+            </div>
+          </div>
+          <div style={{ fontSize:9, color:"#94a3b8", textAlign:"center", marginTop:4 }}>{t.vzTL(vehicle.L,vehicle.W)} <span style={gapStyle}>｜ {t.vzMinGap} {t.vzGap("L",gapL)} / {t.vzGap("W",minGapW)} cm</span></div>
+        </div>
+
+        {/* ===== REAR VIEW ===== */}
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:"#64748b", marginBottom:6, textAlign:"center" }}>{t.vzRr}</div>
+          <div style={{ position:"relative", width: fBedW + 16, height: fBedH + fWheelR + 20 }}>
+            <div style={{
+              position:"absolute", left:4, bottom: fWheelR + 4,
+              width: fBedW + 8, height: fBedH + 6,
+              background: frameColor, borderRadius:"3px 3px 0 0",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+              <div style={{
+                width: fBedW, height: fBedH,
+                background: bedBg, border:`2px solid ${cabLight}`, borderRadius:2,
+                position:"relative", overflow:"hidden",
+              }}>
+                {buildRearBlocks()}
+              </div>
+            </div>
+            <div style={{ position:"absolute", left:2, bottom: fWheelR + 2, width: fBedW + 12, height:4, background: cabLight, borderRadius:2 }}/>
+            <div style={{ position:"absolute", left:5, bottom: fWheelR + 8, width:6, height:10, background:"#ef4444", borderRadius:2 }}/>
+            <div style={{ position:"absolute", right:5, bottom: fWheelR + 8, width:6, height:10, background:"#ef4444", borderRadius:2 }}/>
+            <Wheel size={fWheelR} style={{ position:"absolute", left: 6, bottom:0 }} />
+            <Wheel size={fWheelR} style={{ position:"absolute", right: 6, bottom:0 }} />
+            <div style={{ position:"absolute", bottom:0, left:0, width:"100%", height:1, background:"#e2e8f0" }}/>
+          </div>
+          <div style={{ fontSize:9, color:"#94a3b8", textAlign:"center", marginTop:4 }}>{t.vzRL(vehicle.W,vehicle.H)} <span style={gapStyle}>｜ {t.vzMinGap} {t.vzGap("W",minGapW)} / {t.vzGap("H",minGapH)} cm</span></div>
+        </div>
+      </div>
+
+      {/* Legend: per-line color */}
+      <div style={{ display:"flex", gap:12, marginTop:12, fontSize:10, color:"#64748b", justifyContent:"center", flexWrap:"wrap" }}>
+        {origLines.map((ln, i) => (
+          <span key={ln.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
+            <span style={{ width:10, height:10, background:zColors[i % zColors.length]+"30",
+              border:`1px solid ${zColors[i % zColors.length]}`, borderRadius:2, display:"inline-block" }}/>
+            {t.lineNo(i+1)}: {ln.l}×{ln.cw}×{ln.h}cm
+          </span>
+        ))}
+        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <span style={{ width:10, height:10, background:deadBg, border:"1px dashed #fca5a5", borderRadius:2, display:"inline-block" }}/>
+          {t.lgD}
+        </span>
+      </div>
+
+      {/* Detail list - card style, 2 columns */}
+      <div style={{ marginTop:12, display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:8 }}>
+        {zones.map((z, zi) => {
+          const lineIdx = origIdx(z.line);
+          const c = colorMap[z.line.id];
+          return (
+            <div key={`z${zi}`} style={{
+              background:"#fff", borderRadius:8, padding:"10px 14px",
+              borderLeft:`3px solid ${c}`,
+              boxShadow:"0 1px 3px rgba(0,0,0,0.04)",
+            }}>
+              {/* Tier 1 - Floor item */}
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                <span style={{
+                  fontSize:9, fontWeight:700, color:"#fff", background:c,
+                  padding:"1px 7px", borderRadius:10, whiteSpace:"nowrap",
+                }}>{t.tier(1)}</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                <span style={{ fontSize:12, fontWeight:700, color:c }}>{t.lineNo(lineIdx)}</span>
+                <span style={{ fontSize:12, fontWeight:600, color:"#1e293b" }}>
+                  {z.line.l}×{z.line.cw}×{z.line.h}cm
+                </span>
+                <span style={{ fontSize:11, color:"#64748b" }}>×{z.qty}{t.uPcs}</span>
+                <span style={{
+                  fontSize:9, background:"#f1f5f9", color:"#64748b", padding:"1px 6px",
+                  borderRadius:4, fontFamily:"monospace",
+                }}>{z.nL}L × {z.nW}W × {z.nH}H</span>
+              </div>
+              <div style={{ fontSize:10, color:"#94a3b8", marginTop:3 }}>
+                L: {z.usedL}cm
+              </div>
+
+              {/* Stacked tiers */}
+              {z.topItems.map((ti, j) => {
+                const tiIdx = origIdx(ti.line);
+                const tc = colorMap[ti.line.id];
+                const tierNum = j + 2;
+                return (
+                  <div key={`t${j}`} style={{ borderTop:"1px dashed #e2e8f0", marginTop:8, paddingTop:6 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                      <span style={{
+                        fontSize:9, fontWeight:700, color:"#fff", background:tc+"cc",
+                        padding:"1px 7px", borderRadius:10, whiteSpace:"nowrap",
+                      }}>{t.tier(tierNum)}</span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, fontWeight:600, color:tc }}>{t.lineNo(tiIdx)}</span>
+                      <span style={{ fontSize:11, fontWeight:600, color:"#475569" }}>
+                        {ti.line.l}×{ti.line.cw}×{ti.line.h}cm
+                      </span>
+                      <span style={{ fontSize:10, color:"#64748b" }}>×{ti.placed}{t.uPcs}</span>
+                      <span style={{
+                        fontSize:9, background:"#f8fafc", color:"#94a3b8", padding:"1px 5px",
+                        borderRadius:3, fontFamily:"monospace",
+                      }}>{ti.nL}L × {ti.nW}W × {ti.nH}H</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// --- Card for multi-line (zone-based) ---
+function MultiCard({ v, zoneResult, totalWeight, totalVol, origLines, truckCount, isRecommended, t }) {
+  const effW = v.ew;
+  const wOk = totalWeight <= effW;
+  const ok = zoneResult !== null && wOk;
+  const wPct = (totalWeight / effW) * 100;
+  const vehicleVol = (v.L * v.W * v.H / 1e6).toFixed(1);
+
+  // Determine NG reasons
+  const ngReasons = [];
+  if (!wOk) ngReasons.push(t.znWOver);
+  if (!zoneResult) ngReasons.push(t.znLOver);
+
+  const tight = ok && zoneResult && (wPct > 85 || zoneResult.remainL < 20);
+  const hasMulti = !ok && truckCount > 0;
+  const borderColor = ok ? (tight ? "#f59e0b" : "#22c55e") : hasMulti ? (isRecommended ? "#22c55e" : "#93c5fd") : "#e2e8f0";
+  const bgColor = ok ? (tight ? "#fffbeb" : "#f0fdf4") : hasMulti ? (isRecommended ? "#f0fdf4" : "#eff6ff") : "#fff";
+  const badgeColor = ok ? (tight ? "#f59e0b" : "#22c55e") : hasMulti ? (isRecommended ? "#22c55e" : "#2563eb") : "#ef4444";
+  const badgeText = ok ? (tight ? t.znCaut : t.znOk) : hasMulti ? t.bCnt(truckCount) : t.znNg;
+
+  return (
+    <div style={{
+      background: bgColor,
+      border: ok || hasMulti ? `2px solid ${borderColor}` : `1px solid ${borderColor}`,
+      borderRadius: 10, padding: 14,
+      opacity: ok || hasMulti ? 1 : 0.5,
+    }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+        <div>
+          <span style={{ fontSize:16, fontWeight:700 }}>{vn(v,t)}</span>
+          <span style={{ fontSize:11, color:"#94a3b8", marginLeft:6 }}>{vd(v,t)}</span>
+        </div>
+        <span style={{
+          background:badgeColor, color:"#fff", fontSize:11, fontWeight:700,
+          padding:"3px 8px", borderRadius:12,
+        }}>{badgeText}</span>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, fontSize:11, color:"#64748b", marginBottom:6 }}>
+        <div>
+          <span style={{ color:"#64748b" }}>{t.ldCap}</span>
+          <div style={{ fontWeight:600, fontSize:13 }}>
+            <b style={{ color:"#1e293b" }}>{effW.toLocaleString()}kg</b>
+            {v.w !== v.ew && <span style={{ fontSize:9, color:"#94a3b8", marginLeft:3 }}>{t.rated(v.w.toLocaleString())}</span>}
+          </div>
+        </div>
+        <div>{t.vol} <b style={{ color:"#1e293b" }}>{vehicleVol}m³</b></div>
+        <div>{t.inSz} <b style={{ color:"#1e293b" }}>{v.L}×{v.W}×{v.H}</b></div>
+      </div>
+
+      {ok && zoneResult && (
+        <div style={{ background: tight ? "#fefce8" : "#f8fafc", borderRadius:6, padding:10, marginTop:6 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#64748b" }}>
+            <span>{t.zoneW(totalWeight.toLocaleString(), effW.toLocaleString())}</span>
+            <span style={{ fontWeight:600, color: wPct > 85 ? "#f59e0b" : "#22c55e" }}>{wPct.toFixed(0)}%</span>
+          </div>
+          <Bar pct={wPct} color={wPct > 85 ? "#f59e0b" : "#22c55e"} />
+
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#64748b", marginTop:6 }}>
+            <span>{t.zoneUsedL(zoneResult.usedL, v.L)}</span>
+            <span style={{ fontWeight:600, color: zoneResult.remainL < 20 ? "#f59e0b" : "#22c55e" }}>
+              {t.zoneRem(zoneResult.remainL)}
+            </span>
+          </div>
+          <Bar pct={(zoneResult.usedL / v.L) * 100} color={zoneResult.remainL < 20 ? "#f59e0b" : "#3b82f6"} />
+
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#64748b", marginTop:6 }}>
+            <span>{t.zoneFill(zoneResult.fill.toFixed(1))}</span>
+          </div>
+          <Bar pct={zoneResult.fill} color="#3b82f6" />
+
+          {/* Per-zone breakdown */}
+          <div style={{ marginTop:8, fontSize:10, color:"#64748b" }}>
+            {zoneResult.zones.map((z, i) => {
+              const oi = origLines ? origLines.findIndex(ln => ln.id === z.line.id) + 1 : i + 1;
+              return (
+              <div key={i} style={{ marginTop: i > 0 ? 2 : 0 }}>
+                <div>{t.lineNo(oi)}: {z.bl}×{z.bw}×{z.bh}cm → {z.nL}×{z.nW}×{z.nH} (L:{z.usedL}cm)</div>
+                {z.topItems && z.topItems.map((ti, j) => {
+                  const toi = origLines ? origLines.findIndex(ln => ln.id === ti.line.id) + 1 : j + 1;
+                  return (
+                  <div key={j} style={{ marginLeft:12, color:"#94a3b8", fontStyle:"italic" }}>
+                    ↑ {t.lineNo(toi)}: {ti.bl}×{ti.bw}×{ti.bh}cm × {ti.placed}{t.uPcs}
+                  </div>
+                );})}
+              </div>
+            );})}
+          </div>
+        </div>
+      )}
+
+      {!ok && ngReasons.length > 0 && (
+        <div style={{ fontSize:11, color:"#ef4444", marginTop:4 }}>
+          {ngReasons.map((r,i) => <div key={i}>{r}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Parse pasted cargo text ---
+function parseCargo(text) {
+  const lines = text.split(/\n/).map(s => s.trim()).filter(Boolean);
+
+  // Extract total qty: "28 pc", "28pcs", "28個", "28件"
+  let totalQty = 0;
+  let totalWeight = 0;
+  for (const ln of lines) {
+    const qm = ln.match(/(?:貨物量|货物量|数量|qty|quantity)[：:\s]*(\d+)\s*(?:pc|pcs|個|件|pieces?)?/i);
+    if (qm) totalQty = parseInt(qm[1]);
+    const wm = ln.match(/(?:重量|weight|gross)[^：:\d]*[：:\s]*(\d+(?:\.\d+)?)\s*(?:kg|KG)/i);
+    if (wm) totalWeight = parseFloat(wm[1]);
+  }
+
+  // Extract dimension lines: "80cm×74cm×116cm/12pc" or "80x74x116/12"
+  const items = [];
+  const dimRe = /(\d+(?:\.\d+)?)\s*(?:cm|CM)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm|CM)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm|CM)?/;
+  const qtyRe = /[\/\s]+(\d+)\s*(?:pc|pcs|個|件|pieces?|pal|パレット)?/i;
+  const wLineRe = /(\d+(?:\.\d+)?)\s*(?:kg|KG)/;
+
+  for (const ln of lines) {
+    const dm = ln.match(dimRe);
+    if (!dm) continue;
+    const l = parseFloat(dm[1]), cw = parseFloat(dm[2]), h = parseFloat(dm[3]);
+    let q = 1;
+    const rest = ln.slice(dm.index + dm[0].length);
+    const before = ln.slice(0, dm.index);
+    const qm = rest.match(qtyRe) || before.match(/(\d+)\s*(?:pc|pcs|個|件)/i);
+    if (qm) q = parseInt(qm[1]);
+    // Per-line weight
+    let w = 0;
+    const wm = rest.match(wLineRe) || before.match(wLineRe);
+    if (wm) w = parseFloat(wm[1]);
+    items.push({ l, cw, h, q, w });
+  }
+
+  // Distribute total weight if per-line weight not available
+  if (items.length > 0 && totalWeight > 0) {
+    const hasWeights = items.some(it => it.w > 0);
+    if (!hasWeights) {
+      const sumQ = items.reduce((s, it) => s + it.q, 0);
+      if (sumQ > 0) {
+        const perPc = totalWeight / sumQ;
+        for (const it of items) it.w = Math.round(perPc * 10) / 10;
+      }
+    }
+  }
+
+  return items;
+}
+
 export default function CargoVehicleTool({ defaultLang = "ja" }) {
-  const [w, setW] = useState(6);
-  const [l, setL] = useState(80);
-  const [cw, setCw] = useState(65);
-  const [h, setH] = useState(34);
-  const [q, setQ] = useState(12);
+  const [lines, setLines] = useState([{ id: 1, w: 6, l: 80, cw: 65, h: 34, q: 12 }]);
+  const [nextId, setNextId] = useState(2);
   const [fixH, setFixH] = useState(true);
   const [lang, setLang] = useState(defaultLang);
   const t = T[lang];
 
+  // Load Noto Sans SC from Google Fonts for Chinese
+  useEffect(() => {
+    if (lang === "zh" && !document.querySelector('link[href*="Noto+Sans+SC"]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap";
+      document.head.appendChild(link);
+    }
+  }, [lang]);
+
+  const addLine = () => {
+    if (lines.length >= 10) return;
+    setLines([...lines, { id: nextId, w: 0, l: 0, cw: 0, h: 0, q: 1 }]);
+    setNextId(nextId + 1);
+  };
+  const removeLine = (id) => {
+    if (lines.length <= 1) return;
+    setLines(lines.filter(ln => ln.id !== id));
+  };
+  const updateLine = (id, field, val) => {
+    setLines(lines.map(ln => ln.id === id ? { ...ln, [field]: val } : ln));
+  };
+
+  // Paste import
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteMsg, setPasteMsg] = useState(null); // { ok, text }
+  const [pasteTab, setPasteTab] = useState("text"); // "text" | "image"
+  const [imgLoading, setImgLoading] = useState(false);
+  const [imgPreview, setImgPreview] = useState(null); // base64 data URL
+  const imgFileRef = useRef(null);
+
+  const processImage = async (base64Data, mediaType) => {
+    setImgLoading(true);
+    setPasteMsg(null);
+    setImgPreview(`data:${mediaType};base64,${base64Data}`);
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+              { type: "text", text: `この画像から貨物/荷物の情報を読み取り、以下の形式のテキストのみを返してください。余計な説明は不要です。
+
+フォーマット:
+総重量：XXX kg
+サイズ：
+[長さ]cm×[幅]cm×[高さ]cm/[数量]pc（1個あたり[重量]kg）
+
+・寸法はcm単位、重量はkg単位で出力
+・複数品目がある場合はサイズ行を複数出力
+・重量情報があれば「（1個あたりXXkg）」を付加
+・画像から読み取れる情報のみ出力し、推測しない
+・数量が不明な場合は1pcとする` }
+            ]
+          }]
+        })
+      });
+      const data = await resp.json();
+      const text = data.content?.map(b => b.type === "text" ? b.text : "").join("") || "";
+      if (text.trim()) {
+        setPasteText(text.trim());
+        setPasteMsg({ ok: true, text: t.imgOk });
+      } else {
+        setPasteMsg({ ok: false, text: t.imgErr });
+      }
+    } catch (e) {
+      setPasteMsg({ ok: false, text: t.imgErr });
+    } finally {
+      setImgLoading(false);
+    }
+  };
+
+  const handleImageFile = (file) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const [header, base64] = dataUrl.split(",");
+      const mediaType = header.match(/data:(.*?);/)?.[1] || "image/png";
+      processImage(base64, mediaType);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handleImageFile(file);
+  };
+
+  const handlePasteImage = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        handleImageFile(item.getAsFile());
+        return;
+      }
+    }
+  };
+  const doPaste = () => {
+    const items = parseCargo(pasteText);
+    if (items.length === 0) {
+      setPasteMsg({ ok: false, text: t.pasteErr });
+      return;
+    }
+    const newLines = items.slice(0, 10).map((it, i) => ({
+      id: nextId + i, w: it.w, l: it.l, cw: it.cw, h: it.h, q: it.q,
+    }));
+    setLines(newLines);
+    setNextId(nextId + newLines.length);
+    setCommitted(null);
+    setPasteOpen(false); setPasteMsg(null); setPasteText("");
+  };
+
   // Committed values (only update on button press)
-  const [committed, setCommitted] = useState({ w:6, l:80, cw:65, h:34, q:12, fixH:true });
-  const [hasResult, setHasResult] = useState(false);
+  const [committed, setCommitted] = useState(null);
+  const hasResult = committed !== null;
 
-  const doJudge = () => { setCommitted({ w, l, cw, h, q, fixH }); setHasResult(true); };
+  const doJudge = () => setCommitted({ lines: lines.map(ln => ({...ln})), fixH });
 
-  // Check if inputs differ from last committed values
-  const isDirty = hasResult && (w !== committed.w || l !== committed.l || cw !== committed.cw || h !== committed.h || q !== committed.q || fixH !== committed.fixH);
+  // isDirty: compare current inputs vs last committed
+  const isDirty = hasResult && (() => {
+    if (fixH !== committed.fixH) return true;
+    if (lines.length !== committed.lines.length) return true;
+    return lines.some((ln, i) => {
+      const c = committed.lines[i];
+      if (!c) return true;
+      return ln.w !== c.w || ln.l !== c.l || ln.cw !== c.cw || ln.h !== c.h || ln.q !== c.q;
+    });
+  })();
 
-  // Live summary (always updates)
-  const tw = w * q;
-  const uv = (l * cw * h) / 1e6;
-  const tv = uv * q;
+  // Live summary
+  const totalWeight = lines.reduce((s, ln) => s + ln.w * ln.q, 0);
+  const totalVol = lines.reduce((s, ln) => s + (ln.l * ln.cw * ln.h / 1e6) * ln.q, 0);
 
-  // Results based on committed values only
-  const cargo = useMemo(() => committed, [committed]);
-  const ctw = committed.w * committed.q;
+  const isSingle = hasResult && committed.lines.length === 1;
 
-  // Check if a single item fits in any regular truck (for trailer fallback)
+  // ====== Single-line results (existing logic, exact backward compat) ======
+  const singleCargo = isSingle ? { ...committed.lines[0], fixH: committed.fixH } : null;
+  const ctw = singleCargo ? singleCargo.w * singleCargo.q : 0;
+
   const singleItemFitsRegular = useMemo(() => {
-    if (!hasResult) return true;
+    if (!isSingle) return true;
     return TRUCKS.some(v => {
-      if (committed.w > v.ew) return false;
-      const st = simulate(v, committed.l, committed.cw, committed.h, 1, committed.fixH);
+      if (singleCargo.w > v.ew) return false;
+      const st = simulate(v, singleCargo.l, singleCargo.cw, singleCargo.h, 1, committed.fixH);
       return st && st.ok;
     });
-  }, [committed, hasResult]);
+  }, [committed, isSingle]);
 
-  // Find best single truck
   const best = useMemo(() => {
-    if (!hasResult) return null;
+    if (!isSingle) return null;
     return TRUCKS.find(v => {
       if (ctw > v.ew) return false;
-      const st = simulate(v, committed.l, committed.cw, committed.h, committed.q, committed.fixH);
+      const st = simulate(v, singleCargo.l, singleCargo.cw, singleCargo.h, singleCargo.q, committed.fixH);
       return st && st.ok;
     });
-  }, [committed, hasResult]);
+  }, [committed, isSingle]);
 
-  // Multi-truck calculation: fill 10T first, then find smallest truck for remainder
   const truck10 = TRUCKS.find(v => v.id === "10");
   const multiTruck = useMemo(() => {
-    if (!hasResult || best || !singleItemFitsRegular || !truck10) return null;
-    const st10 = simulate(truck10, committed.l, committed.cw, committed.h, committed.q, committed.fixH);
+    if (!isSingle || best || !singleItemFitsRegular || !truck10) return null;
+    const st10 = simulate(truck10, singleCargo.l, singleCargo.cw, singleCargo.h, singleCargo.q, committed.fixH);
     if (!st10) return null;
-    const maxPer10 = Math.min(st10.max, Math.floor(truck10.ew / committed.w));
+    const maxPer10 = Math.min(st10.max, Math.floor(truck10.ew / singleCargo.w));
     if (maxPer10 <= 0) return null;
-
-    const num10 = Math.floor(committed.q / maxPer10);
-    const remainder = committed.q - num10 * maxPer10;
-
-    if (remainder === 0) {
-      return { plan: [{ vehicle: truck10, count: num10, maxPerTruck: maxPer10, assigned: maxPer10 }] };
-    }
-
-    // Find smallest truck for the remainder
+    const num10 = Math.floor(singleCargo.q / maxPer10);
+    const remainder = singleCargo.q - num10 * maxPer10;
+    if (remainder === 0) return { plan: [{ vehicle: truck10, count: num10, maxPerTruck: maxPer10, assigned: maxPer10 }] };
     let remainVehicle = null;
     for (const v of TRUCKS) {
-      if (committed.w * remainder > v.ew) continue;
-      const stR = simulate(v, committed.l, committed.cw, committed.h, remainder, committed.fixH);
+      if (singleCargo.w * remainder > v.ew) continue;
+      const stR = simulate(v, singleCargo.l, singleCargo.cw, singleCargo.h, remainder, committed.fixH);
       if (stR && stR.ok) { remainVehicle = v; break; }
     }
-
     const plan = [];
     if (remainVehicle && remainVehicle.id !== truck10.id) {
-      // Simulate with large qty to find true max capacity of remainder vehicle
-      const stRFull = simulate(remainVehicle, committed.l, committed.cw, committed.h, 99999, committed.fixH);
-      const trueMax = stRFull ? Math.min(stRFull.max, Math.floor(remainVehicle.ew / committed.w)) : remainder;
+      const stRFull = simulate(remainVehicle, singleCargo.l, singleCargo.cw, singleCargo.h, 99999, committed.fixH);
+      const trueMax = stRFull ? Math.min(stRFull.max, Math.floor(remainVehicle.ew / singleCargo.w)) : remainder;
       if (num10 > 0) plan.push({ vehicle: truck10, count: num10, maxPerTruck: maxPer10, assigned: maxPer10 });
       plan.push({ vehicle: remainVehicle, count: 1, maxPerTruck: trueMax, assigned: remainder });
     } else {
-      // Remainder also needs 10T — consolidate
       plan.push({ vehicle: truck10, count: num10 + 1, maxPerTruck: maxPer10, assigned: maxPer10 });
     }
     return { plan };
-  }, [committed, hasResult, best, singleItemFitsRegular]);
+  }, [committed, isSingle, best, singleItemFitsRegular]);
 
-  // Trailer: only when single item exceeds all regular trucks
-  const needsTrailer = hasResult && !best && !singleItemFitsRegular;
-  const trailerSt = needsTrailer ? simulate(TRAILER, committed.l, committed.cw, committed.h, committed.q, committed.fixH) : null;
-
-  const bestSt = best ? simulate(best, committed.l, committed.cw, committed.h, committed.q, committed.fixH) : null;
-  const bestCapPct = bestSt ? (committed.q / bestSt.max) * 100 : 0;
+  const needsTrailer = isSingle && hasResult && !best && !singleItemFitsRegular;
+  const trailerSt = needsTrailer ? simulate(TRAILER, singleCargo.l, singleCargo.cw, singleCargo.h, singleCargo.q, committed.fixH) : null;
+  const bestSt = best ? simulate(best, singleCargo.l, singleCargo.cw, singleCargo.h, singleCargo.q, committed.fixH) : null;
+  const bestCapPct = bestSt ? (singleCargo.q / bestSt.max) * 100 : 0;
   const bestPerLayer = bestSt ? bestSt.nL * bestSt.nW : 0;
-  const bestActualTiers = bestPerLayer > 0 ? Math.ceil(committed.q / bestPerLayer) : 0;
+  const bestActualTiers = bestPerLayer > 0 ? Math.ceil(singleCargo.q / bestPerLayer) : 0;
   const bestActualGapH = best && bestSt ? best.H - (bestActualTiers * bestSt.bh) : 0;
   const bestHasSmallGap = bestSt && (
-    (bestSt.gL > 0 && bestSt.gL < 5) ||
-    (bestSt.gW > 0 && bestSt.gW < 5) ||
-    (bestActualGapH > 0 && bestActualGapH < 5)
+    (bestSt.gL > 0 && bestSt.gL < 5) || (bestSt.gW > 0 && bestSt.gW < 5) || (bestActualGapH > 0 && bestActualGapH < 5)
   );
-  const bestWPct = best ? (committed.w * committed.q / best.ew * 100) : 0;
-  const bestTight = best && bestSt && (
-    bestCapPct >= 80 || (bestHasSmallGap && bestCapPct >= 50) || bestWPct > 85
+  const bestWPct = best ? (singleCargo.w * singleCargo.q / best.ew * 100) : 0;
+  const bestTight = best && bestSt && (bestCapPct >= 80 || (bestHasSmallGap && bestCapPct >= 50) || bestWPct > 85);
+
+  // ====== Multi-line results (zone-based) ======
+  const isMulti = hasResult && committed.lines.length > 1;
+  const cTotalWeight = hasResult ? committed.lines.reduce((s, ln) => s + ln.w * ln.q, 0) : 0;
+  const cTotalVol = hasResult ? committed.lines.reduce((s, ln) => s + (ln.l * ln.cw * ln.h / 1e6) * ln.q, 0) : 0;
+
+  // Sort by single-item volume descending (large items first)
+  const sortedLines = useMemo(() => {
+    if (!isMulti) return [];
+    return [...committed.lines]
+      .filter(ln => ln.q > 0 && ln.l > 0 && ln.cw > 0 && ln.h > 0)
+      .sort((a, b) => (b.l * b.cw * b.h) - (a.l * a.cw * a.h));
+  }, [committed, isMulti]);
+
+  // Zone results per vehicle
+  const zoneResults = useMemo(() => {
+    if (!isMulti) return {};
+    const results = {};
+    for (const v of TRUCKS) {
+      if (cTotalWeight > v.ew) { results[v.id] = null; continue; }
+      results[v.id] = simulateZone(v, sortedLines, committed.fixH);
+    }
+    // Trailer
+    if (cTotalWeight <= TRAILER.ew) {
+      results[TRAILER.id] = simulateZone(TRAILER, sortedLines, committed.fixH);
+    }
+    return results;
+  }, [committed, isMulti, sortedLines, cTotalWeight]);
+
+  const multiBest = useMemo(() => {
+    if (!isMulti) return null;
+    return TRUCKS.find(v => cTotalWeight <= v.ew && zoneResults[v.id] !== null);
+  }, [isMulti, zoneResults, cTotalWeight]);
+
+  const multiBestZR = multiBest ? zoneResults[multiBest.id] : null;
+  const multiBestTight = multiBest && multiBestZR && (
+    (cTotalWeight / multiBest.ew * 100) > 85 || multiBestZR.remainL < 20
   );
+  const multiNeedsTrailer = useMemo(() => {
+    if (!isMulti) return false;
+    // Only show trailer if some individual item doesn't fit in any regular truck
+    for (const ln of sortedLines) {
+      const singleFits = TRUCKS.some(v => {
+        const rots = committed.fixH
+          ? [[ln.l, ln.cw, ln.h], [ln.cw, ln.l, ln.h]]
+          : [[ln.l,ln.cw,ln.h],[ln.cw,ln.l,ln.h],[ln.l,ln.h,ln.cw],[ln.h,ln.l,ln.cw],[ln.cw,ln.h,ln.l],[ln.h,ln.cw,ln.l]];
+        return rots.some(([bl,bw,bh]) => bl <= v.L && bw <= v.W && bh <= v.H);
+      });
+      if (!singleFits) return true;
+    }
+    return false;
+  }, [isMulti, sortedLines, committed]);
+  const multiTrailerZR = multiNeedsTrailer ? zoneResults[TRAILER.id] : null;
+
+  // Multi-truck plan for mixed cargo when no single truck fits
+  const multiPlan = useMemo(() => {
+    if (!isMulti || multiBest) return null; // single truck works
+
+    let remaining = sortedLines.map(ln => ({...ln}));
+    const plan = [];
+    const truck10 = TRUCKS[TRUCKS.length - 1];
+
+    for (let i = 0; i < 10; i++) {
+      const active = remaining.filter(ln => ln.q > 0);
+      if (active.length === 0) break;
+
+      // Try smallest truck that fits all remaining
+      const remW = active.reduce((s, ln) => s + ln.w * ln.q, 0);
+      let fullFit = null;
+      for (const v of TRUCKS) {
+        if (remW > v.ew) continue;
+        const r = simulateZone(v, active, committed.fixH);
+        if (r) { fullFit = { vehicle: v, zoneResult: r, placed: active.map(ln => ({...ln})) }; break; }
+      }
+      if (fullFit) { plan.push(fullFit); break; }
+
+      // Greedy fill with 10T
+      const fill = greedyFillZone(truck10, active, committed.fixH);
+      if (fill) {
+        plan.push({ vehicle: truck10, zoneResult: fill.zoneResult, placed: fill.placed });
+        remaining = fill.remaining;
+      } else {
+        // Try trailer for oversized items
+        const trFill = greedyFillZone(TRAILER, active, committed.fixH);
+        if (trFill) {
+          plan.push({ vehicle: TRAILER, zoneResult: trFill.zoneResult, placed: trFill.placed });
+          remaining = trFill.remaining;
+        } else break;
+      }
+    }
+    return plan.length > 0 ? plan : null;
+  }, [isMulti, multiBest, sortedLines, committed]);
+
+  // Per-vehicle truck count for NG vehicles
+  const truckCounts = useMemo(() => {
+    if (!isMulti) return {};
+    const counts = {};
+    for (const v of [...TRUCKS, TRAILER]) {
+      if (zoneResults[v.id]) continue; // single truck OK (non-null result exists)
+      // Count how many of this vehicle type needed
+      let remaining = sortedLines.map(ln => ({...ln}));
+      let n = 0;
+      for (let i = 0; i < 20; i++) {
+        const active = remaining.filter(ln => ln.q > 0);
+        if (active.length === 0) break;
+        const fill = greedyFillZone(v, active, committed.fixH);
+        if (!fill) break;
+        n++;
+        remaining = fill.remaining;
+      }
+      const leftover = remaining.filter(ln => ln.q > 0);
+      if (n > 0 && leftover.length === 0) counts[v.id] = n;
+    }
+    return counts;
+  }, [isMulti, sortedLines, zoneResults, committed]);
+
+  // Recommended = fewest trucks among regular trucks, or from multiPlan
+  const multiRecommendedId = useMemo(() => {
+    if (multiBest) return multiBest.id;
+    // Find regular truck with fewest count
+    let minCount = Infinity, minId = null;
+    for (const v of TRUCKS) {
+      const c = truckCounts[v.id];
+      if (c && c < minCount) { minCount = c; minId = v.id; }
+    }
+    return minId;
+  }, [multiBest, truckCounts]);
 
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "16px 12px", fontFamily: t.font }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <span style={{ fontSize: 24 }}>📦</span>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t.title}</h1>
           <p style={{ margin: 0, fontSize: 11, color: "#94a3b8" }}>{t.subtitle}</p>
         </div>
         <button onClick={() => setLang(lang==="ja"?"zh":"ja")} style={{ background:"#f1f5f9", border:"1px solid #e2e8f0", borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:600, cursor:"pointer", color:"#475569" }}>{t.langBtn}</button>
       </div>
 
-      {/* Input */}
+      {/* Paste Import Modal */}
+      {pasteOpen && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, bottom:0,
+          background:"rgba(0,0,0,0.4)", zIndex:1000,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:16,
+        }} onClick={() => { setPasteOpen(false); setImgPreview(null); }}>
+          <div style={{
+            background:"#fff", borderRadius:12, padding:20, width:"100%", maxWidth:520,
+            boxShadow:"0 20px 60px rgba(0,0,0,0.2)",
+          }} onClick={e => e.stopPropagation()}>
+            {/* Tabs */}
+            <div style={{ display:"flex", gap:0, marginBottom:16, borderBottom:"2px solid #e2e8f0" }}>
+              {["text","image"].map(tab => (
+                <button key={tab} onClick={() => { setPasteTab(tab); setPasteMsg(null); }} style={{
+                  flex:1, padding:"8px 0", fontSize:13, fontWeight:600, cursor:"pointer",
+                  border:"none", background:"none",
+                  borderBottom: pasteTab === tab ? "2px solid #3b82f6" : "2px solid transparent",
+                  color: pasteTab === tab ? "#3b82f6" : "#94a3b8",
+                  marginBottom:-2,
+                }}>{tab === "text" ? t.tabText : t.tabImg}</button>
+              ))}
+            </div>
+
+            {pasteTab === "text" ? (
+              <>
+                <div style={{ fontSize:11, color:"#94a3b8", marginBottom:12 }}>{t.pasteSub}</div>
+                <textarea
+                  value={pasteText}
+                  onChange={e => { setPasteText(e.target.value); setPasteMsg(null); }}
+                  placeholder={t.pastePlace}
+                  style={{
+                    width:"100%", height:160, padding:12, fontSize:13, fontFamily:"monospace",
+                    border:"1px solid #e2e8f0", borderRadius:8, resize:"vertical",
+                    outline:"none", boxSizing:"border-box", lineHeight:1.6,
+                  }}
+                  autoFocus
+                />
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize:11, color:"#94a3b8", marginBottom:12 }}>{t.imgSub}</div>
+                {/* Drop zone */}
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                  onPaste={handlePasteImage}
+                  onClick={() => imgFileRef.current?.click()}
+                  tabIndex={0}
+                  style={{
+                    border:"2px dashed #cbd5e1", borderRadius:10, padding: imgPreview ? 8 : 32,
+                    textAlign:"center", cursor:"pointer", background:"#f8fafc",
+                    minHeight: 120, display:"flex", flexDirection:"column",
+                    alignItems:"center", justifyContent:"center", outline:"none",
+                    transition:"border-color 0.2s",
+                  }}
+                  onFocus={e => e.currentTarget.style.borderColor = "#3b82f6"}
+                  onBlur={e => e.currentTarget.style.borderColor = "#cbd5e1"}
+                >
+                  {imgLoading ? (
+                    <div style={{ fontSize:14, color:"#3b82f6", fontWeight:600 }}>{t.imgReading}</div>
+                  ) : imgPreview ? (
+                    <img src={imgPreview} alt="" style={{ maxWidth:"100%", maxHeight:200, borderRadius:6 }} />
+                  ) : (
+                    <div style={{ fontSize:13, color:"#94a3b8", whiteSpace:"pre-line" }}>{t.imgDrop}</div>
+                  )}
+                  <input ref={imgFileRef} type="file" accept="image/*" style={{ display:"none" }}
+                    onChange={e => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]); }} />
+                </div>
+                {/* Show extracted text for review */}
+                {pasteText && !imgLoading && (
+                  <textarea
+                    value={pasteText}
+                    onChange={e => { setPasteText(e.target.value); setPasteMsg(null); }}
+                    style={{
+                      width:"100%", height:100, padding:10, fontSize:12, fontFamily:"monospace",
+                      border:"1px solid #e2e8f0", borderRadius:8, resize:"vertical",
+                      outline:"none", boxSizing:"border-box", lineHeight:1.5, marginTop:10,
+                    }}
+                  />
+                )}
+              </>
+            )}
+
+            {pasteMsg && (
+              <div style={{
+                marginTop:8, fontSize:12, fontWeight:600, padding:"6px 10px", borderRadius:6,
+                background: pasteMsg.ok ? "#f0fdf4" : "#fef2f2",
+                color: pasteMsg.ok ? "#16a34a" : "#ef4444",
+              }}>{pasteMsg.text}</div>
+            )}
+            <div style={{ display:"flex", gap:8, marginTop:12, justifyContent:"flex-end" }}>
+              <button onClick={() => { setPasteOpen(false); setImgPreview(null); }} style={{
+                background:"none", border:"1px solid #d1d5db", borderRadius:8,
+                padding:"8px 16px", fontSize:13, color:"#64748b", cursor:"pointer",
+              }}>{t.pasteCancel}</button>
+              <button onClick={doPaste} disabled={imgLoading} style={{
+                background: imgLoading ? "#94a3b8" : "#3b82f6", color:"#fff", border:"none", borderRadius:8,
+                padding:"8px 20px", fontSize:13, fontWeight:700, cursor: imgLoading ? "not-allowed" : "pointer",
+              }}>{t.pasteBtn}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Input: multi-line table */}
       <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 16, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>{t.cargoInfo}</div>
-          <button onClick={() => { setW(0); setL(0); setCw(0); setH(0); setQ(1); setFixH(true); setHasResult(false); }} style={{
-            background: "none", border: "1px solid #d1d5db", borderRadius: 6,
-            padding: "3px 10px", fontSize: 11, color: "#94a3b8", cursor: "pointer",
-            display: "flex", alignItems: "center", gap: 4,
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.borderColor = "#fca5a5"; }}
-          onMouseLeave={e => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.borderColor = "#d1d5db"; }}
-          >🗑 {lang === "ja" ? "クリア" : "清除"}</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => { setPasteOpen(true); setPasteMsg(null); setPasteText(""); setPasteTab("text"); setImgPreview(null); }} style={{
+              background: "#f0fdf4", color: "#16a34a", border: "1px solid #86efac", borderRadius: 6,
+              padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+            }}>{t.paste}</button>
+            {lines.length < 10 && (
+              <button onClick={addLine} style={{
+                background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6,
+                padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+              }}>{t.addLine}</button>
+            )}
+            <button onClick={() => { setLines([{ id: nextId, w: 0, l: 0, cw: 0, h: 0, q: 1 }]); setNextId(nextId + 1); setCommitted(null); }} style={{
+              background: "none", border: "1px solid #d1d5db", borderRadius: 6,
+              padding: "3px 10px", fontSize: 11, color: "#94a3b8", cursor: "pointer",
+            }}>{t.clear}</button>
+          </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
-          <Input label={t.lbW} unit={t.uKg} val={w} set={setW} />
-          <Input label={t.lbL} unit={t.uCm} val={l} set={setL} />
-          <Input label={t.lbCw} unit={t.uCm} val={cw} set={setCw} />
-          <Input label={t.lbH} unit={t.uCm} val={h} set={setH} />
-          <Input label={t.lbQ} unit={t.uPcs} val={q} set={setQ} min={1} />
+
+        {/* Line rows */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {lines.map((ln, idx) => (
+            <div key={ln.id} style={{
+              display: "grid",
+              gridTemplateColumns: lines.length > 1 ? "28px repeat(5, 1fr) 28px" : "repeat(5, 1fr)",
+              gap: 6, alignItems: "end",
+            }}>
+              {lines.length > 1 && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textAlign: "center", paddingBottom: 10 }}>
+                  {idx + 1}
+                </div>
+              )}
+              <Input label={idx === 0 ? t.lbW : ""} unit={t.uKg} val={ln.w} set={v => updateLine(ln.id, "w", v)} />
+              <Input label={idx === 0 ? t.lbL : ""} unit={t.uCm} val={ln.l} set={v => updateLine(ln.id, "l", v)} />
+              <Input label={idx === 0 ? t.lbCw : ""} unit={t.uCm} val={ln.cw} set={v => updateLine(ln.id, "cw", v)} />
+              <Input label={idx === 0 ? t.lbH : ""} unit={t.uCm} val={ln.h} set={v => updateLine(ln.id, "h", v)} />
+              <Input label={idx === 0 ? t.lbQ : ""} unit={t.uPcs} val={ln.q} set={v => updateLine(ln.id, "q", v)} min={1} />
+              {lines.length > 1 && (
+                <button onClick={() => removeLine(ln.id)} style={{
+                  background: "none", border: "none", fontSize: 14, color: "#cbd5e1",
+                  cursor: "pointer", paddingBottom: 8, transition: "color 0.15s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                onMouseLeave={e => e.currentTarget.style.color = "#cbd5e1"}
+                >🗑</button>
+              )}
+            </div>
+          ))}
         </div>
+        {lines.length >= 10 && <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>{t.maxLines}</div>}
+
+        {/* Summary */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }}>
           <div style={{ background: "#fff", borderRadius: 6, padding: "8px 12px", border: "1px solid #e2e8f0" }}>
-            <div style={{ fontSize: 10, color: "#94a3b8" }}>{t.totW}</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{tw.toLocaleString()} <span style={{ fontSize: 11, color: "#94a3b8" }}>kg</span></div>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>{t.totQ}</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{lines.reduce((s, ln) => s + (ln.q || 0), 0).toLocaleString()} <span style={{ fontSize: 11, color: "#94a3b8" }}>{t.uPcs}</span></div>
           </div>
           <div style={{ background: "#fff", borderRadius: 6, padding: "8px 12px", border: "1px solid #e2e8f0" }}>
-            <div style={{ fontSize: 10, color: "#94a3b8" }}>{t.uVol}</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{uv.toFixed(2)} <span style={{ fontSize: 11, color: "#94a3b8" }}>m³</span></div>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>{t.totW}</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{totalWeight.toLocaleString()} <span style={{ fontSize: 11, color: "#94a3b8" }}>kg</span></div>
           </div>
           <div style={{ background: "#fff", borderRadius: 6, padding: "8px 12px", border: "1px solid #e2e8f0" }}>
             <div style={{ fontSize: 10, color: "#94a3b8" }}>{t.totV}</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{tv.toFixed(2)} <span style={{ fontSize: 11, color: "#94a3b8" }}>m³</span></div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{totalVol.toFixed(3)} <span style={{ fontSize: 11, color: "#94a3b8" }}>m³</span></div>
           </div>
         </div>
 
@@ -825,7 +2076,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
         </button>
       </div>
 
-      {/* Results section */}
+      {/* ====== Results ====== */}
       {hasResult && (
         <>
           {/* Dirty warning */}
@@ -834,111 +2085,170 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
               background: "#fffbeb", border: "1px solid #fbbf24", borderRadius: 8,
               padding: "8px 12px", marginBottom: 12, fontSize: 11, color: "#92400e",
               display: "flex", alignItems: "center", gap: 6,
-            }}>
-              {t.dirtyW}
-            </div>
+            }}>{t.dirtyW}</div>
           )}
 
-          {/* Recommendation: single truck */}
-          {best && (
-            <div style={{
-              background: bestTight ? "#fffbeb" : "#f0fdf4",
-              border: bestTight ? "1px solid #fbbf24" : "1px solid #86efac",
-              borderRadius: 10, padding: "12px 16px", marginBottom: 16,
-              display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: bestTight ? "#f59e0b" : "#22c55e" }}>
-                {bestTight ? t.recW : t.rec}
-              </span>
-              <span style={{ fontSize: 16, fontWeight: 700 }}>{vn(best,t)}</span>
-              <span style={{ fontSize: 11, color: "#64748b" }}>{t.recMin}</span>
-              {bestTight && (
-                <span style={{ fontSize: 10, color: "#92400e", fontWeight: 500 }}>
-                  {t.recTN}
-                </span>
+          {/* ===== Single-line results ===== */}
+          {isSingle && (
+            <>
+              {best && (
+                <div style={{
+                  background: bestTight ? "#fffbeb" : "#f0fdf4",
+                  border: bestTight ? "1px solid #fbbf24" : "1px solid #86efac",
+                  borderRadius: 10, padding: "12px 16px", marginBottom: 16,
+                  display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: bestTight ? "#f59e0b" : "#22c55e" }}>
+                    {bestTight ? t.recW : t.rec}
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 700 }}>{vn(best,t)}</span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>{t.recMin}</span>
+                  {bestTight && <span style={{ fontSize: 10, color: "#92400e", fontWeight: 500 }}>{t.recTN}</span>}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Recommendation: multi-truck */}
-          {multiTruck && (
-            <div style={{
-              background: "#eff6ff", border: "1px solid #93c5fd",
-              borderRadius: 10, padding: "12px 16px", marginBottom: 16,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#2563eb" }}>{t.multi}</span>
-                <span style={{ fontSize: 16, fontWeight: 700 }}>
-                  {multiTruck.plan.map((p, i) => (
-                    <span key={i}>
-                      {i > 0 && <span style={{ color: "#94a3b8", fontWeight: 400 }}> ＋ </span>}
-                      {vn(p.vehicle,t)} × {t.bCnt(p.count)}
+              {multiTruck && (
+                <div style={{ background: "#eff6ff", border: "1px solid #93c5fd", borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#2563eb" }}>{t.multi}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700 }}>
+                      {multiTruck.plan.map((p, i) => (
+                        <span key={i}>
+                          {i > 0 && <span style={{ color: "#94a3b8", fontWeight: 400 }}> ＋ </span>}
+                          {vn(p.vehicle,t)} × {t.bCnt(p.count)}
+                        </span>
+                      ))}
                     </span>
-                  ))}
-                </span>
-              </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>
-                {multiTruck.plan.map((p, i) => (
-                  <div key={i} style={{ marginTop: i > 0 ? 2 : 0 }}>
-                    {t.mLine(vn(p.vehicle,t),p.assigned,p.count)}
-                    {p.assigned < p.maxPerTruck && <span style={{ color: "#94a3b8" }}>{t.mMax(p.maxPerTruck)}</span>}
                   </div>
-                ))}
-                <div style={{ marginTop: 4, fontWeight: 600, color: "#1e293b" }}>
-                  {t.mTot(committed.q,multiTruck.plan.reduce((s,p)=>s+p.count,0))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Recommendation: trailer (single item too large for any truck) */}
-          {needsTrailer && (
-            <div style={{
-              background: "#fefce8", border: "1px solid #fbbf24",
-              borderRadius: 10, padding: "12px 16px", marginBottom: 16,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#ca8a04" }}>{t.trW}</span>
-                <span style={{ fontSize: 16, fontWeight: 700 }}>{vn(TRAILER,t)}</span>
-              </div>
-              <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
-                {t.trEx}
-              </div>
-              {trailerSt && trailerSt.ok && (
-                <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 600, marginTop: 4 }}>
-                  {t.trOk(trailerSt.max)}
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>
+                    {multiTruck.plan.map((p, i) => (
+                      <div key={i} style={{ marginTop: i > 0 ? 2 : 0 }}>
+                        {t.mLine(vn(p.vehicle,t),p.assigned,p.count)}
+                        {p.assigned < p.maxPerTruck && <span style={{ color: "#94a3b8" }}>{t.mMax(p.maxPerTruck)}</span>}
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 4, fontWeight: 600, color: "#1e293b" }}>
+                      {t.mTot(singleCargo.q,multiTruck.plan.reduce((s,p)=>s+p.count,0))}
+                    </div>
+                  </div>
                 </div>
               )}
-              {trailerSt && !trailerSt.ok && (
-                <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, marginTop: 4 }}>
-                  {t.trNg(trailerSt.max)}
+
+              {needsTrailer && (
+                <div style={{ background: "#fefce8", border: "1px solid #fbbf24", borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#ca8a04" }}>{t.trW}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700 }}>{vn(TRAILER,t)}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>{t.trEx}</div>
+                  {trailerSt && trailerSt.ok && <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 600, marginTop: 4 }}>{t.trOk(trailerSt.max)}</div>}
+                  {trailerSt && !trailerSt.ok && <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, marginTop: 4 }}>{t.trNg(trailerSt.max)}</div>}
+                  {!trailerSt && <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, marginTop: 4 }}>{t.trSzNg}</div>}
                 </div>
               )}
-              {!trailerSt && (
-                <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, marginTop: 4 }}>
-                  {t.trSzNg}
+
+              {best && bestSt && <StackingViz vehicle={best} stacking={bestSt} qty={singleCargo.q} t={t} />}
+
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>{t.resT}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+                {TRUCKS.map(v => <Card key={v.id} v={v} cargo={singleCargo} plan={multiTruck ? multiTruck.plan : null} t={t} />)}
+                {needsTrailer && <Card v={TRAILER} cargo={singleCargo} plan={null} t={t} />}
+              </div>
+            </>
+          )}
+
+          {/* ===== Multi-line results ===== */}
+          {isMulti && (
+            <>
+              {/* Recommendation: single truck */}
+              {multiBest && (
+                <div style={{
+                  background: multiBestTight ? "#fffbeb" : "#f0fdf4",
+                  border: multiBestTight ? "1px solid #fbbf24" : "1px solid #86efac",
+                  borderRadius: 10, padding: "12px 16px", marginBottom: 16,
+                  display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: multiBestTight ? "#f59e0b" : "#22c55e" }}>
+                    {multiBestTight ? t.recW : t.rec}
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 700 }}>{vn(multiBest,t)}</span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>{t.recMin}</span>
+                  {multiBestTight && <span style={{ fontSize: 10, color: "#92400e", fontWeight: 500 }}>{t.recTN}</span>}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Stacking Visualization for recommended vehicle */}
-          {best && bestSt && (
-            <StackingViz vehicle={best} stacking={bestSt} qty={committed.q} t={t} />
-          )}
+              {/* Trailer recommendation */}
+              {multiNeedsTrailer && multiTrailerZR && (
+                <div style={{ background: "#fefce8", border: "1px solid #fbbf24", borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#ca8a04" }}>{t.trW}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700 }}>{vn(TRAILER,t)}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>{t.trEx}</div>
+                  {multiTrailerZR && <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 600, marginTop: 4 }}>{t.znOk}</div>}
+                  {!multiTrailerZR && <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, marginTop: 4 }}>{t.znNg}</div>}
+                </div>
+              )}
 
-          {/* Results */}
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>{t.resT}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-            {TRUCKS.map(v => <Card key={v.id} v={v} cargo={cargo} plan={multiTruck ? multiTruck.plan : null} t={t} />)}
-            {needsTrailer && <Card v={TRAILER} cargo={cargo} plan={null} t={t} />}
-          </div>
+              {/* Multi-truck plan */}
+              {multiPlan && (
+                <div style={{ background: "#eff6ff", border: "1px solid #93c5fd", borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#2563eb" }}>{t.multi}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700 }}>
+                      {(() => {
+                        const counts = {};
+                        multiPlan.forEach(p => {
+                          const nm = vn(p.vehicle, t);
+                          counts[nm] = (counts[nm] || 0) + 1;
+                        });
+                        return Object.entries(counts).map(([nm, cnt], i) => (
+                          <span key={i}>
+                            {i > 0 && <span style={{ color: "#94a3b8", fontWeight: 400 }}> ＋ </span>}
+                            {nm} × {t.bCnt(cnt)}
+                          </span>
+                        ));
+                      })()}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>
+                    {multiPlan.map((p, i) => (
+                      <div key={i} style={{ marginTop: i > 0 ? 2 : 0 }}>
+                        {t.mzTk(i + 1, vn(p.vehicle, t))} — {t.mzItems(
+                          p.placed.map(pl => ({ idx: committed.lines.findIndex(ln => ln.id === pl.id) + 1, q: pl.q }))
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Zone visualization: single truck */}
+              {multiBest && multiBestZR && (
+                <ZoneViz vehicle={multiBest} zoneResult={multiBestZR} sortedLines={sortedLines} origLines={committed.lines} t={t} />
+              )}
+
+              {/* Zone visualization: multi-truck plan - one per truck */}
+              {multiPlan && multiPlan.map((p, i) => (
+                <div key={`mz${i}`} style={{ marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#2563eb", marginBottom: 4 }}>
+                    {t.mzTk(i + 1, vn(p.vehicle, t))}
+                  </div>
+                  <ZoneViz vehicle={p.vehicle} zoneResult={p.zoneResult} sortedLines={p.placed} origLines={committed.lines} t={t} />
+                </div>
+              ))}
+
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>{t.resT}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+                {TRUCKS.map(v => <MultiCard key={v.id} v={v} zoneResult={zoneResults[v.id]} totalWeight={cTotalWeight} totalVol={cTotalVol} origLines={committed.lines} truckCount={truckCounts[v.id] || 0} isRecommended={v.id === multiRecommendedId} t={t} />)}
+                {multiNeedsTrailer && <MultiCard v={TRAILER} zoneResult={multiTrailerZR} totalWeight={cTotalWeight} totalVol={cTotalVol} origLines={committed.lines} truckCount={truckCounts[TRAILER.id] || 0} isRecommended={false} t={t} />}
+              </div>
+            </>
+          )}
         </>
       )}
 
-      <div style={{ marginTop: 16, fontSize: 10, color: "#94a3b8", lineHeight: 1.5 }}>
-        {t.foot}
-      </div>
+      <div style={{ marginTop: 16, fontSize: 10, color: "#94a3b8", lineHeight: 1.5 }}>{t.foot}</div>
       <FeedbackButton lang={lang} />
     </div>
   );
