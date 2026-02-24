@@ -1568,31 +1568,10 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
     setPasteMsg(null);
     setImgPreview(`data:${mediaType};base64,${base64Data}`);
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("/api/ocr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
-              { type: "text", text: `この画像から貨物/荷物の情報を読み取り、以下の形式のテキストのみを返してください。余計な説明は不要です。
-
-フォーマット:
-総重量：XXX kg
-サイズ：
-[長さ]cm×[幅]cm×[高さ]cm/[数量]pc（1個あたり[重量]kg）
-
-・寸法はcm単位、重量はkg単位で出力
-・複数品目がある場合はサイズ行を複数出力
-・重量情報があれば「（1個あたりXXkg）」を付加
-・画像から読み取れる情報のみ出力し、推測しない
-・数量が不明な場合は1pcとする` }
-            ]
-          }]
-        })
+        body: JSON.stringify({ base64Data, mediaType })
       });
       const data = await resp.json();
       const text = data.content?.map(b => b.type === "text" ? b.text : "").join("") || "";
