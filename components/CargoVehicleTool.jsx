@@ -1477,36 +1477,49 @@ function MultiCard({ v, zoneResult, totalWeight, totalVol, origLines, truckCount
 function parseCargo(text) {
   const lines = text.split(/\n/).map(s => s.trim()).filter(Boolean);
 
-  // Extract total qty: "28 pc", "28pcs", "28個", "28件"
+  // Extract total qty: "28 pc", "28pcs", "28個", "28件", "Pieces: 7"
   let totalQty = 0;
   let totalWeight = 0;
   for (const ln of lines) {
-    const qm = ln.match(/(?:貨物量|货物量|数量|qty|quantity)[：:\s]*(\d+)\s*(?:pc|pcs|個|件|pieces?)?/i);
+    const qm = ln.match(/(?:貨物量|货物量|数量|qty|quantity|pieces?)[：:\s]*(\d+)\s*(?:pc|pcs|個|件|pieces?)?/i);
     if (qm) totalQty = parseInt(qm[1]);
-    const wm = ln.match(/(?:重量|weight|gross)[^：:\d]*[：:\s]*(\d+(?:\.\d+)?)\s*(?:kg|KG)/i);
-    if (wm) totalWeight = parseFloat(wm[1]);
+    const wm = ln.match(/(?:総重量|总重量|重量|gross\s*weight|total\s*weight)[^：:\d]*[：:\s]*([\d,]+(?:\.\d+)?)\s*(?:kg)/i);
+    if (wm) totalWeight = parseFloat(wm[1].replace(/,/g, ""));
   }
 
-  // Extract dimension lines: "80cm×74cm×116cm/12pc" or "80x74x116/12"
+  // Extract dimension lines: "80cm×74cm×116cm/12pc", "80x74x116/12", "7 / 111 x 111 x 155 CM (190.00 KG/pc)"
   const items = [];
-  const dimRe = /(\d+(?:\.\d+)?)\s*(?:cm|CM)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm|CM)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm|CM)?/;
+  // Pattern: optional "qty /" before dimensions
+  const dimLineRe = /(?:(\d+)\s*[\/]\s*)?(\d+(?:\.\d+)?)\s*(?:cm)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm)?/i;
   const qtyRe = /[\/\s]+(\d+)\s*(?:pc|pcs|個|件|pieces?|pal|パレット)?/i;
-  const wLineRe = /(\d+(?:\.\d+)?)\s*(?:kg|KG)/;
+  const wLineRe = /([\d,]+(?:\.\d+)?)\s*(?:kg)\s*(?:\/\s*(?:pc|pcs|piece|個|件))?/i;
 
   for (const ln of lines) {
-    const dm = ln.match(dimRe);
+    const dm = ln.match(dimLineRe);
     if (!dm) continue;
-    const l = parseFloat(dm[1]), cw = parseFloat(dm[2]), h = parseFloat(dm[3]);
+    const prefixQty = dm[1] ? parseInt(dm[1]) : 0;
+    const l = parseFloat(dm[2]), cw = parseFloat(dm[3]), h = parseFloat(dm[4]);
     let q = 1;
     const rest = ln.slice(dm.index + dm[0].length);
     const before = ln.slice(0, dm.index);
+    // Try qty from after dimensions: "/12pc"
     const qm = rest.match(qtyRe) || before.match(/(\d+)\s*(?:pc|pcs|個|件)/i);
-    if (qm) q = parseInt(qm[1]);
-    // Per-line weight
+    if (qm) {
+      q = parseInt(qm[1]);
+    } else if (prefixQty > 0) {
+      // Use qty from prefix: "7 / 111 x 111 x 155"
+      q = prefixQty;
+    }
+    // Per-line weight: "190.00 KG/pc" or "190kg"
     let w = 0;
     const wm = rest.match(wLineRe) || before.match(wLineRe);
-    if (wm) w = parseFloat(wm[1]);
+    if (wm) w = parseFloat(wm[1].replace(/,/g, ""));
     items.push({ l, cw, h, q, w });
+  }
+
+  // If only one item with q=1 and totalQty is available, use totalQty
+  if (items.length === 1 && items[0].q === 1 && totalQty > 0) {
+    items[0].q = totalQty;
   }
 
   // Distribute total weight if per-line weight not available
