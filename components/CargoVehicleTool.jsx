@@ -62,15 +62,13 @@ const T = {
     lgB:"カートン", lgD:"デッドスペース", lgC:"キャブ",
     font:"system-ui, sans-serif",
     addLine:"+ 品目追加", delLine:"削除", clear:"クリア",
-    paste:"📋 貼り付け（画像可）", pasteTitle:"テキスト貼り付けで一括入力",
-    pasteSub:"貨物情報テキストを貼り付けてください",
-    pastePlace:"例:\n貨物量：28 pc\n総実重量：852 kg\nサイズ：\n80cm×74cm×116cm/12pc\n80cm×74cm×126cm/10pc\n130cm×72cm×128cm/4pc",
+    paste:"📋 貼り付け（画像可）",
+    pasteSub:"貨物情報のテキストを貼り付けてください（形式は自由）",
+    pastePlace:"どんな形式でもOKです。例：\n\n80cm×74cm×116cm 12個 5kg\nL800 W740 H1160 × 10pc\nサイズ: 80x74x116, 数量12\n\nメール本文や表のコピペもそのまま貼り付けできます",
     pasteBtn:"取り込み", pasteCancel:"キャンセル",
-    pasteErr:"サイズ情報を検出できませんでした。「80×74×116cm/12pc」のような形式で入力してください。",
-    pasteOk:(n)=>`${n}品目を取り込みました`,
-    imgBtn:"📷 画像読取",
+    pasteParsing:"🔍 AI解析中...",
+    pasteErr:"貨物情報を読み取れませんでした。寸法（長さ×幅×高さ）と数量を含むテキストを貼り付けてください。",
     tabText:"📋 テキスト", tabImg:"📷 画像",
-    imgTitle:"画像から貨物情報を読み取り",
     imgSub:"スクリーンショットや写真をドロップ、貼り付け、または選択してください",
     imgDrop:"画像をここにドロップ\nまたはクリックして選択",
     imgReading:"🔍 画像を読み取り中...",
@@ -152,15 +150,13 @@ const T = {
     lgB:"纸箱", lgD:"空置空间", lgC:"驾驶室",
     font:"'Noto Sans SC', system-ui, sans-serif",
     addLine:"+ 添加品目", delLine:"删除", clear:"清除",
-    paste:"📋 粘贴（可识图）", pasteTitle:"粘贴文本批量输入",
-    pasteSub:"请粘贴货物信息文本",
-    pastePlace:"例:\n货物量：28 pc\n总重量：852 kg\n尺寸：\n80cm×74cm×116cm/12pc\n80cm×74cm×126cm/10pc\n130cm×72cm×128cm/4pc",
+    paste:"📋 粘贴（可识图）",
+    pasteSub:"请粘贴货物信息文本（任何格式均可）",
+    pastePlace:"任何格式均可。例：\n\n80cm×74cm×116cm 12个 5kg\nL800 W740 H1160 × 10pc\n尺寸: 80x74x116, 数量12\n\n邮件正文或表格内容也可直接粘贴",
     pasteBtn:"导入", pasteCancel:"取消",
-    pasteErr:"未检测到尺寸信息。请使用「80×74×116cm/12pc」格式输入。",
-    pasteOk:(n)=>`已导入${n}个品目`,
-    imgBtn:"📷 图片识别",
+    pasteParsing:"🔍 AI解析中...",
+    pasteErr:"无法识别货物信息。请粘贴包含尺寸（长×宽×高）和数量的文本。",
     tabText:"📋 文本", tabImg:"📷 图片",
-    imgTitle:"从图片识别货物信息",
     imgSub:"拖放、粘贴或选择截图/照片",
     imgDrop:"将图片拖放到此处\n或点击选择",
     imgReading:"🔍 正在识别图片...",
@@ -1374,7 +1370,7 @@ function ZoneViz({ vehicle, zoneResult, sortedLines, origLines, t }) {
 
 
 // --- Card for multi-line (zone-based) ---
-function MultiCard({ v, zoneResult, totalWeight, totalVol, origLines, truckCount, isRecommended, t }) {
+function MultiCard({ v, zoneResult, totalWeight, origLines, truckCount, isRecommended, t }) {
   const effW = v.ew;
   const wOk = totalWeight <= effW;
   const ok = zoneResult !== null && wOk;
@@ -1473,70 +1469,6 @@ function MultiCard({ v, zoneResult, totalWeight, totalVol, origLines, truckCount
   );
 }
 
-// --- Parse pasted cargo text ---
-function parseCargo(text) {
-  const lines = text.split(/\n/).map(s => s.trim()).filter(Boolean);
-
-  // Extract total qty: "28 pc", "28pcs", "28個", "28件", "Pieces: 7"
-  let totalQty = 0;
-  let totalWeight = 0;
-  for (const ln of lines) {
-    const qm = ln.match(/(?:貨物量|货物量|数量|qty|quantity|pieces?)[：:\s]*(\d+)\s*(?:pc|pcs|個|件|pieces?)?/i);
-    if (qm) totalQty = parseInt(qm[1]);
-    const wm = ln.match(/(?:総重量|总重量|重量|gross\s*weight|total\s*weight)[^：:\d]*[：:\s]*([\d,]+(?:\.\d+)?)\s*(?:kg)/i);
-    if (wm) totalWeight = parseFloat(wm[1].replace(/,/g, ""));
-  }
-
-  // Extract dimension lines: "80cm×74cm×116cm/12pc", "80x74x116/12", "7 / 111 x 111 x 155 CM (190.00 KG/pc)"
-  const items = [];
-  // Pattern: optional "qty /" before dimensions
-  const dimLineRe = /(?:(\d+)\s*[\/]\s*)?(\d+(?:\.\d+)?)\s*(?:cm)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm)?\s*[×xX\*]\s*(\d+(?:\.\d+)?)\s*(?:cm)?/i;
-  const qtyRe = /[\/\s]+(\d+)\s*(?:pc|pcs|個|件|pieces?|pal|パレット)?/i;
-  const wLineRe = /([\d,]+(?:\.\d+)?)\s*(?:kg)\s*(?:\/\s*(?:pc|pcs|piece|個|件))?/i;
-
-  for (const ln of lines) {
-    const dm = ln.match(dimLineRe);
-    if (!dm) continue;
-    const prefixQty = dm[1] ? parseInt(dm[1]) : 0;
-    const l = parseFloat(dm[2]), cw = parseFloat(dm[3]), h = parseFloat(dm[4]);
-    let q = 1;
-    const rest = ln.slice(dm.index + dm[0].length);
-    const before = ln.slice(0, dm.index);
-    // Try qty from after dimensions: "/12pc"
-    const qm = rest.match(qtyRe) || before.match(/(\d+)\s*(?:pc|pcs|個|件)/i);
-    if (qm) {
-      q = parseInt(qm[1]);
-    } else if (prefixQty > 0) {
-      // Use qty from prefix: "7 / 111 x 111 x 155"
-      q = prefixQty;
-    }
-    // Per-line weight: "190.00 KG/pc" or "190kg"
-    let w = 0;
-    const wm = rest.match(wLineRe) || before.match(wLineRe);
-    if (wm) w = parseFloat(wm[1].replace(/,/g, ""));
-    items.push({ l, cw, h, q, w });
-  }
-
-  // If only one item with q=1 and totalQty is available, use totalQty
-  if (items.length === 1 && items[0].q === 1 && totalQty > 0) {
-    items[0].q = totalQty;
-  }
-
-  // Distribute total weight if per-line weight not available
-  if (items.length > 0 && totalWeight > 0) {
-    const hasWeights = items.some(it => it.w > 0);
-    if (!hasWeights) {
-      const sumQ = items.reduce((s, it) => s + it.q, 0);
-      if (sumQ > 0) {
-        const perPc = totalWeight / sumQ;
-        for (const it of items) it.w = Math.round(perPc * 10) / 10;
-      }
-    }
-  }
-
-  return items;
-}
-
 export default function CargoVehicleTool({ defaultLang = "ja" }) {
   const [lines, setLines] = useState([{ id: 1, w: 6, l: 80, cw: 65, h: 34, q: 12 }]);
   const [nextId, setNextId] = useState(2);
@@ -1572,12 +1504,48 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
   const [pasteText, setPasteText] = useState("");
   const [pasteMsg, setPasteMsg] = useState(null); // { ok, text }
   const [pasteTab, setPasteTab] = useState("text"); // "text" | "image"
-  const [imgLoading, setImgLoading] = useState(false);
+  const [parseLoading, setParseLoading] = useState(false);
   const [imgPreview, setImgPreview] = useState(null); // base64 data URL
   const imgFileRef = useRef(null);
 
+  const parseWithAI = async (inputText) => {
+    setParseLoading(true);
+    setPasteMsg(null);
+    try {
+      const resp = await fetch("/api/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputText })
+      });
+      const data = await resp.json();
+      const raw = data.content?.map(b => b.type === "text" ? b.text : "").join("") || "";
+      const cleaned = raw.replace(/```json|```/g, "").trim();
+      const items = JSON.parse(cleaned);
+      if (!Array.isArray(items) || items.length === 0) {
+        setPasteMsg({ ok: false, text: t.pasteErr });
+        return;
+      }
+      const newLines = items.slice(0, 10).map((it, i) => ({
+        id: nextId + i,
+        l: Number(it.l) || 0,
+        cw: Number(it.w) || 0,
+        h: Number(it.h) || 0,
+        q: Number(it.q) || 1,
+        w: Number(it.kg) || 0,
+      }));
+      setLines(newLines);
+      setNextId(nextId + newLines.length);
+      setCommitted(null);
+      setPasteOpen(false); setPasteMsg(null); setPasteText(""); setImgPreview(null);
+    } catch (e) {
+      setPasteMsg({ ok: false, text: t.pasteErr });
+    } finally {
+      setParseLoading(false);
+    }
+  };
+
   const processImage = async (base64Data, mediaType) => {
-    setImgLoading(true);
+    setParseLoading(true);
     setPasteMsg(null);
     setImgPreview(`data:${mediaType};base64,${base64Data}`);
     try {
@@ -1597,7 +1565,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
     } catch (e) {
       setPasteMsg({ ok: false, text: t.imgErr });
     } finally {
-      setImgLoading(false);
+      setParseLoading(false);
     }
   };
 
@@ -1632,18 +1600,11 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
     }
   };
   const doPaste = () => {
-    const items = parseCargo(pasteText);
-    if (items.length === 0) {
+    if (!pasteText.trim()) {
       setPasteMsg({ ok: false, text: t.pasteErr });
       return;
     }
-    const newLines = items.slice(0, 10).map((it, i) => ({
-      id: nextId + i, w: it.w, l: it.l, cw: it.cw, h: it.h, q: it.q,
-    }));
-    setLines(newLines);
-    setNextId(nextId + newLines.length);
-    setCommitted(null);
-    setPasteOpen(false); setPasteMsg(null); setPasteText("");
+    parseWithAI(pasteText);
   };
 
   // Committed values (only update on button press)
@@ -1735,7 +1696,6 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
   // ====== Multi-line results (zone-based) ======
   const isMulti = hasResult && committed.lines.length > 1;
   const cTotalWeight = hasResult ? committed.lines.reduce((s, ln) => s + ln.w * ln.q, 0) : 0;
-  const cTotalVol = hasResult ? committed.lines.reduce((s, ln) => s + (ln.l * ln.cw * ln.h / 1e6) * ln.q, 0) : 0;
 
   // Sort by single-item volume descending (large items first)
   const sortedLines = useMemo(() => {
@@ -1901,10 +1861,12 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
                   value={pasteText}
                   onChange={e => { setPasteText(e.target.value); setPasteMsg(null); }}
                   placeholder={t.pastePlace}
+                  disabled={parseLoading}
                   style={{
                     width:"100%", height:160, padding:12, fontSize:13, fontFamily:"monospace",
                     border:"1px solid #e2e8f0", borderRadius:8, resize:"vertical",
                     outline:"none", boxSizing:"border-box", lineHeight:1.6,
+                    opacity: parseLoading ? 0.5 : 1,
                   }}
                   autoFocus
                 />
@@ -1929,7 +1891,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
                   onFocus={e => e.currentTarget.style.borderColor = "#3b82f6"}
                   onBlur={e => e.currentTarget.style.borderColor = "#cbd5e1"}
                 >
-                  {imgLoading ? (
+                  {parseLoading ? (
                     <div style={{ fontSize:14, color:"#3b82f6", fontWeight:600 }}>{t.imgReading}</div>
                   ) : imgPreview ? (
                     <img src={imgPreview} alt="" style={{ maxWidth:"100%", maxHeight:200, borderRadius:6 }} />
@@ -1940,7 +1902,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
                     onChange={e => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]); }} />
                 </div>
                 {/* Show extracted text for review */}
-                {pasteText && !imgLoading && (
+                {pasteText && !parseLoading && (
                   <textarea
                     value={pasteText}
                     onChange={e => { setPasteText(e.target.value); setPasteMsg(null); }}
@@ -1966,10 +1928,10 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
                 background:"none", border:"1px solid #d1d5db", borderRadius:8,
                 padding:"8px 16px", fontSize:13, color:"#64748b", cursor:"pointer",
               }}>{t.pasteCancel}</button>
-              <button onClick={doPaste} disabled={imgLoading} style={{
-                background: imgLoading ? "#94a3b8" : "#3b82f6", color:"#fff", border:"none", borderRadius:8,
-                padding:"8px 20px", fontSize:13, fontWeight:700, cursor: imgLoading ? "not-allowed" : "pointer",
-              }}>{t.pasteBtn}</button>
+              <button onClick={doPaste} disabled={parseLoading} style={{
+                background: parseLoading ? "#94a3b8" : "#3b82f6", color:"#fff", border:"none", borderRadius:8,
+                padding:"8px 20px", fontSize:13, fontWeight:700, cursor: parseLoading ? "not-allowed" : "pointer",
+              }}>{parseLoading ? t.pasteParsing : t.pasteBtn}</button>
             </div>
           </div>
         </div>
@@ -2232,8 +2194,8 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
 
               <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>{t.resT}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-                {TRUCKS.map(v => <MultiCard key={v.id} v={v} zoneResult={zoneResults[v.id]} totalWeight={cTotalWeight} totalVol={cTotalVol} origLines={committed.lines} truckCount={truckCounts[v.id] || 0} isRecommended={v.id === multiRecommendedId} t={t} />)}
-                {multiNeedsTrailer && <MultiCard v={TRAILER} zoneResult={multiTrailerZR} totalWeight={cTotalWeight} totalVol={cTotalVol} origLines={committed.lines} truckCount={truckCounts[TRAILER.id] || 0} isRecommended={false} t={t} />}
+                {TRUCKS.map(v => <MultiCard key={v.id} v={v} zoneResult={zoneResults[v.id]} totalWeight={cTotalWeight} origLines={committed.lines} truckCount={truckCounts[v.id] || 0} isRecommended={v.id === multiRecommendedId} t={t} />)}
+                {multiNeedsTrailer && <MultiCard v={TRAILER} zoneResult={multiTrailerZR} totalWeight={cTotalWeight} origLines={committed.lines} truckCount={truckCounts[TRAILER.id] || 0} isRecommended={false} t={t} />}
               </div>
             </>
           )}
