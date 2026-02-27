@@ -21,7 +21,7 @@ export async function POST(request) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
+        max_tokens: 4096,
         messages: [{
           role: "user",
           content: `以下のテキストから貨物/荷物の情報を抽出し、JSON配列のみを返してください。説明や\`\`\`は不要です。
