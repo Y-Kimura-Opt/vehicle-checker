@@ -36,7 +36,7 @@ export async function POST(request) {
 ・数量が不明な場合は1
 ・重量が不明な場合は0
 ・寸法が読み取れない行は無視
-・最大10品目まで
+・最大50品目まで
 
 テキスト:
 ${inputText}`

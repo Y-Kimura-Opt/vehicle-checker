@@ -74,7 +74,7 @@ const T = {
     imgReading:"🔍 画像を読み取り中...",
     imgErr:"画像から貨物情報を読み取れませんでした。テキスト入力をお試しください。",
     imgOk:"画像から読み取った内容を下に表示しました。確認して「取り込み」を押してください。",
-    lineNo:(n)=>`品目${n}`, maxLines:"※ 最大10品目",
+    lineNo:(n)=>`品目${n}`, maxLines:"※ 最大50品目",
     zoneT:(nm)=>`📐 ${nm} — ゾーン配置図`,
     zoneLn:(i,dims,q,usedL)=>`品目${i}: ${dims} ×${q}個 → L:${usedL}cm`,
     zoneRem:(l)=>`余り ${l}cm`,
@@ -162,7 +162,7 @@ const T = {
     imgReading:"🔍 正在识别图片...",
     imgErr:"无法从图片中识别货物信息。请尝试文本输入。",
     imgOk:"已从图片中识别内容，请确认后点击「导入」。",
-    lineNo:(n)=>`品目${n}`, maxLines:"※ 最多10个品目",
+    lineNo:(n)=>`品目${n}`, maxLines:"※ 最多50个品目",
     zoneT:(nm)=>`📐 ${nm} — 分区配置图`,
     zoneLn:(i,dims,q,usedL)=>`品目${i}: ${dims} ×${q}件 → L:${usedL}cm`,
     zoneRem:(l)=>`剩余 ${l}cm`,
@@ -1487,7 +1487,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
   }, [lang]);
 
   const addLine = () => {
-    if (lines.length >= 10) return;
+    if (lines.length >= 50) return;
     setLines([...lines, { id: nextId, w: 0, l: 0, cw: 0, h: 0, q: 1 }]);
     setNextId(nextId + 1);
   };
@@ -1525,7 +1525,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
         setPasteMsg({ ok: false, text: t.pasteErr });
         return;
       }
-      const newLines = items.slice(0, 10).map((it, i) => ({
+      const newLines = items.slice(0, 50).map((it, i) => ({
         id: nextId + i,
         l: Number(it.l) || 0,
         cw: Number(it.w) || 0,
@@ -1946,7 +1946,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
               background: "#f0fdf4", color: "#16a34a", border: "1px solid #86efac", borderRadius: 6,
               padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
             }}>{t.paste}</button>
-            {lines.length < 10 && (
+            {lines.length < 50 && (
               <button onClick={addLine} style={{
                 background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6,
                 padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
@@ -1989,7 +1989,7 @@ export default function CargoVehicleTool({ defaultLang = "ja" }) {
             </div>
           ))}
         </div>
-        {lines.length >= 10 && <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>{t.maxLines}</div>}
+        {lines.length >= 50 && <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>{t.maxLines}</div>}
 
         {/* Summary */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }}>
