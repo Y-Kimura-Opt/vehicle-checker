@@ -185,14 +185,14 @@ function vn(v,t){ const k=VN[v.id]; return k?t[k[0]]:v.id; }
 function vd(v,t){ const k=VN[v.id]; return k?t[k[1]]:""; }
 
 const TRUCKS = [
-  { id:"kv", w:350,  ew:350,  L:180, W:130, H:120 },
+  { id:"kv", w:350,  ew:350,  L:165, W:110, H:100 },
   { id:"kt", w:350,  ew:350,  L:200, W:140, H:180 },
-  { id:"2t", w:2000, ew:2000, L:430, W:170, H:200 },
-  { id:"4t", w:4000, ew:2300, L:620, W:230, H:230 },
-  { id:"10", w:10000,ew:12500,L:960, W:235, H:250 },
+  { id:"2t", w:2000, ew:2000, L:430, W:170, H:185 },
+  { id:"4t", w:4000, ew:2300, L:620, W:230, H:225 },
+  { id:"10", w:10000,ew:12500,L:960, W:235, H:240 },
 ];
 
-const TRAILER = { id:"tr", w:20000,ew:17000,L:1200,W:235, H:270 };
+const TRAILER = { id:"tr", w:20000,ew:17000,L:1200,W:235, H:9999 };
 
 function simulate(v, cl, cw, ch, qty, fixH = false) {
   const rots = fixH
